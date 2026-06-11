@@ -3,6 +3,8 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/aws_profiles.dart';
+import 'api/dynamodb.dart';
 import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -66,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1918914929;
+  int get rustContentHash => 1225883588;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,9 +80,113 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<void> crateApiAwsProfilesAddSsoProfile({
+    required String name,
+    required String ssoSession,
+    required String ssoStartUrl,
+    required String ssoRegion,
+    required String ssoAccountId,
+    required String ssoRoleName,
+  });
+
+  Future<String> crateApiAwsProfilesAwsLogin({required String profileName});
+
+  Future<bool> crateApiAwsProfilesCheckProfileCredentials({
+    required String profileName,
+  });
+
+  Future<void> crateApiDynamodbDeleteItem({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String keyJson,
+  });
+
+  Future<void> crateApiAwsProfilesDeleteProfile({required String name});
+
+  Future<TableSummary> crateApiDynamodbDescribeTable({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+  });
+
+  Future<List<String>> crateApiAwsProfilesGetAwsCliCapabilities();
+
+  Future<AwsDiagnostics> crateApiAwsProfilesGetAwsDiagnostics();
+
   String crateApiSimpleGreet({required String name});
 
   Future<void> crateApiSimpleInitApp();
+
+  Future<List<AwsProfile>> crateApiAwsProfilesListLocalAwsProfiles();
+
+  Future<List<AttributeHint>> crateApiDynamodbListTableAttributes({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    int? sampleLimit,
+  });
+
+  Future<List<String>> crateApiDynamodbListTables({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+  });
+
+  Future<void> crateApiDynamodbPutItem({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+  });
+
+  Future<void> crateApiDynamodbPutItemCreateOnly({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+    required String pkName,
+    String? skName,
+  });
+
+  Future<void> crateApiDynamodbPutItemUpdateOnly({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+    required String pkName,
+    String? skName,
+  });
+
+  Future<ItemsPageResult> crateApiDynamodbQueryItems({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String pkName,
+    required String pkValue,
+    int? limit,
+    String? exclusiveStartKeyJson,
+    List<FilterClause>? filters,
+  });
+
+  Future<ItemsPageResult> crateApiDynamodbScanItems({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    int? limit,
+    String? exclusiveStartKeyJson,
+    List<FilterClause>? filters,
+  });
+
+  Future<String> crateApiAwsProfilesSsoLogin({required String profileName});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -92,13 +198,309 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<void> crateApiAwsProfilesAddSsoProfile({
+    required String name,
+    required String ssoSession,
+    required String ssoStartUrl,
+    required String ssoRegion,
+    required String ssoAccountId,
+    required String ssoRoleName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          sse_encode_String(ssoSession, serializer);
+          sse_encode_String(ssoStartUrl, serializer);
+          sse_encode_String(ssoRegion, serializer);
+          sse_encode_String(ssoAccountId, serializer);
+          sse_encode_String(ssoRoleName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesAddSsoProfileConstMeta,
+        argValues: [
+          name,
+          ssoSession,
+          ssoStartUrl,
+          ssoRegion,
+          ssoAccountId,
+          ssoRoleName,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesAddSsoProfileConstMeta =>
+      const TaskConstMeta(
+        debugName: "add_sso_profile",
+        argNames: [
+          "name",
+          "ssoSession",
+          "ssoStartUrl",
+          "ssoRegion",
+          "ssoAccountId",
+          "ssoRoleName",
+        ],
+      );
+
+  @override
+  Future<String> crateApiAwsProfilesAwsLogin({required String profileName}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profileName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesAwsLoginConstMeta,
+        argValues: [profileName],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesAwsLoginConstMeta =>
+      const TaskConstMeta(debugName: "aws_login", argNames: ["profileName"]);
+
+  @override
+  Future<bool> crateApiAwsProfilesCheckProfileCredentials({
+    required String profileName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profileName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesCheckProfileCredentialsConstMeta,
+        argValues: [profileName],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesCheckProfileCredentialsConstMeta =>
+      const TaskConstMeta(
+        debugName: "check_profile_credentials",
+        argNames: ["profileName"],
+      );
+
+  @override
+  Future<void> crateApiDynamodbDeleteItem({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String keyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_String(keyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbDeleteItemConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          keyJson,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbDeleteItemConstMeta => const TaskConstMeta(
+    debugName: "delete_item",
+    argNames: [
+      "profile",
+      "regionOverride",
+      "endpointOverride",
+      "tableName",
+      "keyJson",
+    ],
+  );
+
+  @override
+  Future<void> crateApiAwsProfilesDeleteProfile({required String name}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesDeleteProfileConstMeta,
+        argValues: [name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesDeleteProfileConstMeta =>
+      const TaskConstMeta(debugName: "delete_profile", argNames: ["name"]);
+
+  @override
+  Future<TableSummary> crateApiDynamodbDescribeTable({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_table_summary,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbDescribeTableConstMeta,
+        argValues: [profile, regionOverride, endpointOverride, tableName],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbDescribeTableConstMeta =>
+      const TaskConstMeta(
+        debugName: "describe_table",
+        argNames: [
+          "profile",
+          "regionOverride",
+          "endpointOverride",
+          "tableName",
+        ],
+      );
+
+  @override
+  Future<List<String>> crateApiAwsProfilesGetAwsCliCapabilities() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesGetAwsCliCapabilitiesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesGetAwsCliCapabilitiesConstMeta =>
+      const TaskConstMeta(debugName: "get_aws_cli_capabilities", argNames: []);
+
+  @override
+  Future<AwsDiagnostics> crateApiAwsProfilesGetAwsDiagnostics() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_aws_diagnostics,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiAwsProfilesGetAwsDiagnosticsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesGetAwsDiagnosticsConstMeta =>
+      const TaskConstMeta(debugName: "get_aws_diagnostics", argNames: []);
+
+  @override
   String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -123,7 +525,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 10,
             port: port_,
           );
         },
@@ -141,6 +543,452 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
+  @override
+  Future<List<AwsProfile>> crateApiAwsProfilesListLocalAwsProfiles() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_aws_profile,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesListLocalAwsProfilesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesListLocalAwsProfilesConstMeta =>
+      const TaskConstMeta(debugName: "list_local_aws_profiles", argNames: []);
+
+  @override
+  Future<List<AttributeHint>> crateApiDynamodbListTableAttributes({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    int? sampleLimit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_opt_box_autoadd_i_32(sampleLimit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_attribute_hint,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbListTableAttributesConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          sampleLimit,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbListTableAttributesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_table_attributes",
+        argNames: [
+          "profile",
+          "regionOverride",
+          "endpointOverride",
+          "tableName",
+          "sampleLimit",
+        ],
+      );
+
+  @override
+  Future<List<String>> crateApiDynamodbListTables({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbListTablesConstMeta,
+        argValues: [profile, regionOverride, endpointOverride],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbListTablesConstMeta => const TaskConstMeta(
+    debugName: "list_tables",
+    argNames: ["profile", "regionOverride", "endpointOverride"],
+  );
+
+  @override
+  Future<void> crateApiDynamodbPutItem({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_String(itemJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbPutItemConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          itemJson,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbPutItemConstMeta => const TaskConstMeta(
+    debugName: "put_item",
+    argNames: [
+      "profile",
+      "regionOverride",
+      "endpointOverride",
+      "tableName",
+      "itemJson",
+    ],
+  );
+
+  @override
+  Future<void> crateApiDynamodbPutItemCreateOnly({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+    required String pkName,
+    String? skName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_String(itemJson, serializer);
+          sse_encode_String(pkName, serializer);
+          sse_encode_opt_String(skName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbPutItemCreateOnlyConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          itemJson,
+          pkName,
+          skName,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbPutItemCreateOnlyConstMeta =>
+      const TaskConstMeta(
+        debugName: "put_item_create_only",
+        argNames: [
+          "profile",
+          "regionOverride",
+          "endpointOverride",
+          "tableName",
+          "itemJson",
+          "pkName",
+          "skName",
+        ],
+      );
+
+  @override
+  Future<void> crateApiDynamodbPutItemUpdateOnly({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String itemJson,
+    required String pkName,
+    String? skName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_String(itemJson, serializer);
+          sse_encode_String(pkName, serializer);
+          sse_encode_opt_String(skName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbPutItemUpdateOnlyConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          itemJson,
+          pkName,
+          skName,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbPutItemUpdateOnlyConstMeta =>
+      const TaskConstMeta(
+        debugName: "put_item_update_only",
+        argNames: [
+          "profile",
+          "regionOverride",
+          "endpointOverride",
+          "tableName",
+          "itemJson",
+          "pkName",
+          "skName",
+        ],
+      );
+
+  @override
+  Future<ItemsPageResult> crateApiDynamodbQueryItems({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    required String pkName,
+    required String pkValue,
+    int? limit,
+    String? exclusiveStartKeyJson,
+    List<FilterClause>? filters,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_String(pkName, serializer);
+          sse_encode_String(pkValue, serializer);
+          sse_encode_opt_box_autoadd_i_32(limit, serializer);
+          sse_encode_opt_String(exclusiveStartKeyJson, serializer);
+          sse_encode_opt_list_filter_clause(filters, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_items_page_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbQueryItemsConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          pkName,
+          pkValue,
+          limit,
+          exclusiveStartKeyJson,
+          filters,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbQueryItemsConstMeta => const TaskConstMeta(
+    debugName: "query_items",
+    argNames: [
+      "profile",
+      "regionOverride",
+      "endpointOverride",
+      "tableName",
+      "pkName",
+      "pkValue",
+      "limit",
+      "exclusiveStartKeyJson",
+      "filters",
+    ],
+  );
+
+  @override
+  Future<ItemsPageResult> crateApiDynamodbScanItems({
+    required String profile,
+    String? regionOverride,
+    String? endpointOverride,
+    required String tableName,
+    int? limit,
+    String? exclusiveStartKeyJson,
+    List<FilterClause>? filters,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profile, serializer);
+          sse_encode_opt_String(regionOverride, serializer);
+          sse_encode_opt_String(endpointOverride, serializer);
+          sse_encode_String(tableName, serializer);
+          sse_encode_opt_box_autoadd_i_32(limit, serializer);
+          sse_encode_opt_String(exclusiveStartKeyJson, serializer);
+          sse_encode_opt_list_filter_clause(filters, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_items_page_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDynamodbScanItemsConstMeta,
+        argValues: [
+          profile,
+          regionOverride,
+          endpointOverride,
+          tableName,
+          limit,
+          exclusiveStartKeyJson,
+          filters,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDynamodbScanItemsConstMeta => const TaskConstMeta(
+    debugName: "scan_items",
+    argNames: [
+      "profile",
+      "regionOverride",
+      "endpointOverride",
+      "tableName",
+      "limit",
+      "exclusiveStartKeyJson",
+      "filters",
+    ],
+  );
+
+  @override
+  Future<String> crateApiAwsProfilesSsoLogin({required String profileName}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(profileName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAwsProfilesSsoLoginConstMeta,
+        argValues: [profileName],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAwsProfilesSsoLoginConstMeta =>
+      const TaskConstMeta(debugName: "sso_login", argNames: ["profileName"]);
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -148,9 +996,176 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AttributeHint dco_decode_attribute_hint(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AttributeHint(
+      name: dco_decode_String(arr[0]),
+      types: dco_decode_list_String(arr[1]),
+    );
+  }
+
+  @protected
+  AwsDiagnostics dco_decode_aws_diagnostics(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return AwsDiagnostics(
+      configPath: dco_decode_String(arr[0]),
+      credentialsPath: dco_decode_String(arr[1]),
+      configExists: dco_decode_bool(arr[2]),
+      credentialsExists: dco_decode_bool(arr[3]),
+      capabilities: dco_decode_list_String(arr[4]),
+      profileCount: dco_decode_i_32(arr[5]),
+      errors: dco_decode_list_String(arr[6]),
+    );
+  }
+
+  @protected
+  AwsProfile dco_decode_aws_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AwsProfile(
+      name: dco_decode_String(arr[0]),
+      kind: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
+  FilterClause dco_decode_filter_clause(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return FilterClause(
+      attribute: dco_decode_String(arr[0]),
+      condition: dco_decode_String(arr[1]),
+      valueType: dco_decode_String(arr[2]),
+      value: dco_decode_opt_String(arr[3]),
+      value2: dco_decode_opt_String(arr[4]),
+    );
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  ItemsPageResult dco_decode_items_page_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ItemsPageResult(
+      itemsJson: dco_decode_list_String(arr[0]),
+      lastEvaluatedKeyJson: dco_decode_opt_String(arr[1]),
+    );
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<AttributeHint> dco_decode_list_attribute_hint(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_attribute_hint).toList();
+  }
+
+  @protected
+  List<AwsProfile> dco_decode_list_aws_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_aws_profile).toList();
+  }
+
+  @protected
+  List<FilterClause> dco_decode_list_filter_clause(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_filter_clause).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
+  }
+
+  @protected
+  List<FilterClause>? dco_decode_opt_list_filter_clause(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_filter_clause(raw);
+  }
+
+  @protected
+  TableSummary dco_decode_table_summary(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    return TableSummary(
+      name: dco_decode_String(arr[0]),
+      status: dco_decode_String(arr[1]),
+      arn: dco_decode_opt_String(arr[2]),
+      itemCount: dco_decode_opt_box_autoadd_i_64(arr[3]),
+      tableSizeBytes: dco_decode_opt_box_autoadd_i_64(arr[4]),
+      billingMode: dco_decode_opt_String(arr[5]),
+      pk: dco_decode_opt_String(arr[6]),
+      sk: dco_decode_opt_String(arr[7]),
+      gsis: dco_decode_list_String(arr[8]),
+      lsis: dco_decode_list_String(arr[9]),
+      streamSpec: dco_decode_opt_String(arr[10]),
+    );
   }
 
   @protected
@@ -173,10 +1188,232 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AttributeHint sse_decode_attribute_hint(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_types = sse_decode_list_String(deserializer);
+    return AttributeHint(name: var_name, types: var_types);
+  }
+
+  @protected
+  AwsDiagnostics sse_decode_aws_diagnostics(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_configPath = sse_decode_String(deserializer);
+    var var_credentialsPath = sse_decode_String(deserializer);
+    var var_configExists = sse_decode_bool(deserializer);
+    var var_credentialsExists = sse_decode_bool(deserializer);
+    var var_capabilities = sse_decode_list_String(deserializer);
+    var var_profileCount = sse_decode_i_32(deserializer);
+    var var_errors = sse_decode_list_String(deserializer);
+    return AwsDiagnostics(
+      configPath: var_configPath,
+      credentialsPath: var_credentialsPath,
+      configExists: var_configExists,
+      credentialsExists: var_credentialsExists,
+      capabilities: var_capabilities,
+      profileCount: var_profileCount,
+      errors: var_errors,
+    );
+  }
+
+  @protected
+  AwsProfile sse_decode_aws_profile(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_kind = sse_decode_String(deserializer);
+    return AwsProfile(name: var_name, kind: var_kind);
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  FilterClause sse_decode_filter_clause(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_attribute = sse_decode_String(deserializer);
+    var var_condition = sse_decode_String(deserializer);
+    var var_valueType = sse_decode_String(deserializer);
+    var var_value = sse_decode_opt_String(deserializer);
+    var var_value2 = sse_decode_opt_String(deserializer);
+    return FilterClause(
+      attribute: var_attribute,
+      condition: var_condition,
+      valueType: var_valueType,
+      value: var_value,
+      value2: var_value2,
+    );
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  ItemsPageResult sse_decode_items_page_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_itemsJson = sse_decode_list_String(deserializer);
+    var var_lastEvaluatedKeyJson = sse_decode_opt_String(deserializer);
+    return ItemsPageResult(
+      itemsJson: var_itemsJson,
+      lastEvaluatedKeyJson: var_lastEvaluatedKeyJson,
+    );
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AttributeHint> sse_decode_list_attribute_hint(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AttributeHint>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_attribute_hint(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AwsProfile> sse_decode_list_aws_profile(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AwsProfile>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_aws_profile(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FilterClause> sse_decode_list_filter_clause(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FilterClause>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_filter_clause(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  List<FilterClause>? sse_decode_opt_list_filter_clause(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_filter_clause(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  TableSummary sse_decode_table_summary(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_status = sse_decode_String(deserializer);
+    var var_arn = sse_decode_opt_String(deserializer);
+    var var_itemCount = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_tableSizeBytes = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_billingMode = sse_decode_opt_String(deserializer);
+    var var_pk = sse_decode_opt_String(deserializer);
+    var var_sk = sse_decode_opt_String(deserializer);
+    var var_gsis = sse_decode_list_String(deserializer);
+    var var_lsis = sse_decode_list_String(deserializer);
+    var var_streamSpec = sse_decode_opt_String(deserializer);
+    return TableSummary(
+      name: var_name,
+      status: var_status,
+      arn: var_arn,
+      itemCount: var_itemCount,
+      tableSizeBytes: var_tableSizeBytes,
+      billingMode: var_billingMode,
+      pk: var_pk,
+      sk: var_sk,
+      gsis: var_gsis,
+      lsis: var_lsis,
+      streamSpec: var_streamSpec,
+    );
   }
 
   @protected
@@ -191,21 +1428,136 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_attribute_hint(AttributeHint self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_list_String(self.types, serializer);
+  }
+
+  @protected
+  void sse_encode_aws_diagnostics(
+    AwsDiagnostics self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.configPath, serializer);
+    sse_encode_String(self.credentialsPath, serializer);
+    sse_encode_bool(self.configExists, serializer);
+    sse_encode_bool(self.credentialsExists, serializer);
+    sse_encode_list_String(self.capabilities, serializer);
+    sse_encode_i_32(self.profileCount, serializer);
+    sse_encode_list_String(self.errors, serializer);
+  }
+
+  @protected
+  void sse_encode_aws_profile(AwsProfile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.kind, serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_filter_clause(FilterClause self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.attribute, serializer);
+    sse_encode_String(self.condition, serializer);
+    sse_encode_String(self.valueType, serializer);
+    sse_encode_opt_String(self.value, serializer);
+    sse_encode_opt_String(self.value2, serializer);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_items_page_result(
+    ItemsPageResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_String(self.itemsJson, serializer);
+    sse_encode_opt_String(self.lastEvaluatedKeyJson, serializer);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_attribute_hint(
+    List<AttributeHint> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_attribute_hint(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_aws_profile(
+    List<AwsProfile> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_aws_profile(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_filter_clause(
+    List<FilterClause> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_filter_clause(item, serializer);
+    }
   }
 
   @protected
@@ -219,6 +1571,68 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_filter_clause(
+    List<FilterClause>? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_filter_clause(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_table_summary(TableSummary self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.status, serializer);
+    sse_encode_opt_String(self.arn, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.itemCount, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.tableSizeBytes, serializer);
+    sse_encode_opt_String(self.billingMode, serializer);
+    sse_encode_opt_String(self.pk, serializer);
+    sse_encode_opt_String(self.sk, serializer);
+    sse_encode_list_String(self.gsis, serializer);
+    sse_encode_list_String(self.lsis, serializer);
+    sse_encode_opt_String(self.streamSpec, serializer);
+  }
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self);
@@ -227,17 +1641,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }

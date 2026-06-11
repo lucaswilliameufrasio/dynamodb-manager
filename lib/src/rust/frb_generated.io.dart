@@ -3,6 +3,8 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/aws_profiles.dart';
+import 'api/dynamodb.dart';
 import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -22,7 +24,64 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AttributeHint dco_decode_attribute_hint(dynamic raw);
+
+  @protected
+  AwsDiagnostics dco_decode_aws_diagnostics(dynamic raw);
+
+  @protected
+  AwsProfile dco_decode_aws_profile(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  FilterClause dco_decode_filter_clause(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  ItemsPageResult dco_decode_items_page_result(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<AttributeHint> dco_decode_list_attribute_hint(dynamic raw);
+
+  @protected
+  List<AwsProfile> dco_decode_list_aws_profile(dynamic raw);
+
+  @protected
+  List<FilterClause> dco_decode_list_filter_clause(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  List<FilterClause>? dco_decode_opt_list_filter_clause(dynamic raw);
+
+  @protected
+  TableSummary dco_decode_table_summary(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -34,7 +93,70 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AttributeHint sse_decode_attribute_hint(SseDeserializer deserializer);
+
+  @protected
+  AwsDiagnostics sse_decode_aws_diagnostics(SseDeserializer deserializer);
+
+  @protected
+  AwsProfile sse_decode_aws_profile(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  FilterClause sse_decode_filter_clause(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ItemsPageResult sse_decode_items_page_result(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AttributeHint> sse_decode_list_attribute_hint(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AwsProfile> sse_decode_list_aws_profile(SseDeserializer deserializer);
+
+  @protected
+  List<FilterClause> sse_decode_list_filter_clause(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  List<FilterClause>? sse_decode_opt_list_filter_clause(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  TableSummary sse_decode_table_summary(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -43,13 +165,67 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
-
-  @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_attribute_hint(AttributeHint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_aws_diagnostics(
+    AwsDiagnostics self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_aws_profile(AwsProfile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_filter_clause(FilterClause self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_items_page_result(
+    ItemsPageResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_attribute_hint(
+    List<AttributeHint> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_aws_profile(
+    List<AwsProfile> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_filter_clause(
+    List<FilterClause> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -58,16 +234,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_list_filter_clause(
+    List<FilterClause>? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_table_summary(TableSummary self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class
