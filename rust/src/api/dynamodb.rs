@@ -1,3 +1,4 @@
+use crate::api::dev_logs::{log_info, log_error};
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sdk_dynamodb::Client as DdbClient;
@@ -76,6 +77,7 @@ async fn build_ddb_client(
     region_override: Option<String>,
     endpoint_override: Option<String>,
 ) -> Result<DdbClient, String> {
+    log_info("dynamodb", format!("build_ddb_client start profile='{}'", profile));
     let mut loader = aws_config::defaults(BehaviorVersion::latest()).profile_name(profile);
     if let Some(region) = region_override {
         loader = loader.region(Region::new(region));
@@ -85,12 +87,19 @@ async fn build_ddb_client(
     }
 
     let config = with_timeout(
-        async move { Ok(loader.load().await) },
+        async move {
+            let cfg = loader.load().await;
+            log_info("dynamodb", format!("config loaded profile='{}'", profile));
+            Ok(cfg)
+        },
         profile,
         "resolving AWS credentials and config",
         CONFIG_TIMEOUT,
     )
-    .await?;
+    .await.map_err(|e| {
+        log_error("dynamodb", format!("config timeout profile='{}': {}", profile, e));
+        e
+    })?;
 
     Ok(DdbClient::new(&config))
 }
@@ -102,6 +111,7 @@ pub async fn list_tables(
     region_override: Option<String>,
     endpoint_override: Option<String>,
 ) -> Result<Vec<String>, String> {
+    log_info("dynamodb", format!("list_tables start profile='{}'", profile));
     let client =
         build_ddb_client(&profile, region_override, endpoint_override).await?;
     let mut tables = Vec::new();
@@ -133,6 +143,7 @@ pub async fn list_tables(
     }
 
     tables.sort();
+    log_info("dynamodb", format!("list_tables done count={} profile='{}'", tables.len(), profile));
     Ok(tables)
 }
 
@@ -142,6 +153,7 @@ pub async fn describe_table(
     endpoint_override: Option<String>,
     table_name: String,
 ) -> Result<TableSummary, String> {
+    log_info("dynamodb", format!("describe_table start table='{}' profile='{}'", table_name, profile));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
 
     let response = with_timeout(
@@ -235,6 +247,7 @@ pub async fn scan_items(
     exclusive_start_key_json: Option<String>,
     filters: Option<Vec<FilterClause>>,
 ) -> Result<ItemsPageResult, String> {
+    log_info("dynamodb", format!("scan_items start table='{}' profile='{}'", table_name, profile));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let mut request = client.scan().table_name(&table_name);
 
@@ -282,12 +295,15 @@ pub async fn scan_items(
         .last_evaluated_key
         .and_then(|m| attr_map_to_json_string(&m).ok());
 
+    log_info("dynamodb", format!("scan_items done count={} table='{}'", items_json.len(), table_name));
+
     Ok(ItemsPageResult {
         items_json,
         last_evaluated_key_json,
     })
 }
 
+/// Query items with partition-key filter, pagination and optional filter expressions.
 pub async fn query_items(
     profile: String,
     region_override: Option<String>,
@@ -299,6 +315,7 @@ pub async fn query_items(
     exclusive_start_key_json: Option<String>,
     filters: Option<Vec<FilterClause>>,
 ) -> Result<ItemsPageResult, String> {
+    log_info("dynamodb", format!("query_items start table='{}' profile='{}'", table_name, profile));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let mut request = client
         .query()
@@ -351,6 +368,8 @@ pub async fn query_items(
         .last_evaluated_key
         .and_then(|m| attr_map_to_json_string(&m).ok());
 
+    log_info("dynamodb", format!("query_items done count={} table='{}'", items_json.len(), table_name));
+
     Ok(ItemsPageResult {
         items_json,
         last_evaluated_key_json,
@@ -366,6 +385,7 @@ pub async fn put_item(
     table_name: String,
     item_json: String,
 ) -> Result<(), String> {
+    log_info("dynamodb", format!("put_item start table='{}' profile='{}'", table_name, profile));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let map = json_str_to_attr_map(&item_json)?;
 
@@ -396,6 +416,7 @@ pub async fn put_item_create_only(
     pk_name: String,
     sk_name: Option<String>,
 ) -> Result<(), String> {
+    log_info("dynamodb", format!("put_item_create_only start table='{}'", table_name));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let map = json_str_to_attr_map(&item_json)?;
 
@@ -435,6 +456,7 @@ pub async fn put_item_update_only(
     pk_name: String,
     sk_name: Option<String>,
 ) -> Result<(), String> {
+    log_info("dynamodb", format!("put_item_update_only start table='{}'", table_name));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let map = json_str_to_attr_map(&item_json)?;
 
@@ -472,6 +494,7 @@ pub async fn delete_item(
     table_name: String,
     key_json: String,
 ) -> Result<(), String> {
+    log_info("dynamodb", format!("delete_item start table='{}' profile='{}'", table_name, profile));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
     let key_map = json_str_to_attr_map(&key_json)?;
 
@@ -502,6 +525,7 @@ pub async fn list_table_attributes(
     table_name: String,
     sample_limit: Option<i32>,
 ) -> Result<Vec<AttributeHint>, String> {
+    log_info("dynamodb", format!("list_table_attributes start table='{}'", table_name));
     let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
 
     let response = with_timeout(

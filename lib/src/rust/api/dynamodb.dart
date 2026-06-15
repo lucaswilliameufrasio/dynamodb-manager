@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `attr_map_to_json_string`, `attr_value_kind`, `attr_value_to_json`, `build_ddb_client`, `build_filter_expression_parts`, `filter_value_to_attr_value`, `json_str_to_attr_map`, `json_val_to_attr_value`
+// These functions are ignored because they are not marked as `pub`: `attr_map_to_json_string`, `attr_value_kind`, `attr_value_to_json`, `build_ddb_client`, `build_filter_expression_parts`, `filter_value_to_attr_value`, `json_str_to_attr_map`, `json_val_to_attr_value`, `with_timeout`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FilterExpressionParts`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -50,6 +50,7 @@ Future<ItemsPageResult> scanItems({
   filters: filters,
 );
 
+/// Query items with partition-key filter, pagination and optional filter expressions.
 Future<ItemsPageResult> queryItems({
   required String profile,
   String? regionOverride,
@@ -204,10 +205,7 @@ class FilterClause {
 }
 
 class ItemsPageResult {
-  /// Each item serialised as a JSON string.
   final List<String> itemsJson;
-
-  /// Optional last-evaluated-key as a JSON string, or null.
   final String? lastEvaluatedKeyJson;
 
   const ItemsPageResult({required this.itemsJson, this.lastEvaluatedKeyJson});

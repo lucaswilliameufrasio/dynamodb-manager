@@ -1,3 +1,4 @@
+use crate::api::dev_logs::{log_info, log_warn, log_error};
 use ini::Ini;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -97,6 +98,7 @@ async fn probe_subcommand(args: &[&str], timeout_secs: u64) -> bool {
 /// Detect which AWS CLI auth subcommands the installed CLI supports.
 /// Each probe has a 3-second timeout to prevent hanging on CLI help pages.
 pub async fn get_aws_cli_capabilities() -> Result<Vec<String>, String> {
+    log_info("aws_profiles", "capability detection start");
     let has_cli = tokio::process::Command::new("which")
         .arg("aws")
         .stdout(std::process::Stdio::null())
@@ -107,6 +109,7 @@ pub async fn get_aws_cli_capabilities() -> Result<Vec<String>, String> {
         .unwrap_or(false);
 
     if !has_cli {
+        log_info("aws_profiles", "AWS CLI not found");
         return Ok(Vec::new());
     }
 
@@ -120,6 +123,7 @@ pub async fn get_aws_cli_capabilities() -> Result<Vec<String>, String> {
     if probe_subcommand(&["configure", "sso", "help"], 3).await {
         caps.push("configure_sso".to_string());
     }
+    log_info("aws_profiles", format!("capabilities: {:?}", caps));
     Ok(caps)
 }
 
@@ -185,6 +189,7 @@ pub async fn get_aws_diagnostics() -> AwsDiagnostics {
 /// List all local AWS profiles, respecting AWS_CONFIG_FILE and
 /// AWS_SHARED_CREDENTIALS_FILE environment variables.
 pub fn list_local_aws_profiles() -> Result<Vec<AwsProfile>, String> {
+    log_info("aws_profiles", "profile discovery start");
     let mut profiles: HashMap<String, String> = HashMap::new();
 
     // 1) Parse credentials file
@@ -236,6 +241,7 @@ pub fn list_local_aws_profiles() -> Result<Vec<AwsProfile>, String> {
         .map(|(name, kind)| AwsProfile { name, kind })
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
+    log_info("aws_profiles", format!("found {} profiles", out.len()));
     Ok(out)
 }
 
@@ -255,6 +261,7 @@ async fn check_aws_cli() -> Result<(), String> {
 
 /// Authenticate a non-SSO profile via `aws login --profile <name>`.
 pub async fn aws_login(profile_name: String) -> Result<String, String> {
+    log_info("aws_profiles", format!("aws login start profile='{}'", profile_name));
     check_aws_cli().await?;
     let status = tokio::process::Command::new("aws")
         .arg("login")
@@ -265,8 +272,10 @@ pub async fn aws_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws login`: {}", e))?;
 
     if status.success() {
+        log_info("aws_profiles", format!("aws login success profile='{}'", profile_name));
         Ok(format!("AWS login successful for profile '{}'", profile_name))
     } else {
+        log_error("aws_profiles", format!("aws login failed profile='{}' exit={:?}", profile_name, status.code()));
         Err(format!(
             "AWS login failed for profile '{}' (exit code: {:?})",
             profile_name, status.code()
@@ -276,6 +285,7 @@ pub async fn aws_login(profile_name: String) -> Result<String, String> {
 
 /// Authenticate an SSO profile via `aws sso login --profile <name>`.
 pub async fn sso_login(profile_name: String) -> Result<String, String> {
+    log_info("aws_profiles", format!("sso login start profile='{}'", profile_name));
     check_aws_cli().await?;
     let status = tokio::process::Command::new("aws")
         .arg("sso")
@@ -287,8 +297,10 @@ pub async fn sso_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws sso login`: {}", e))?;
 
     if status.success() {
+        log_info("aws_profiles", format!("sso login success profile='{}'", profile_name));
         Ok(format!("SSO login successful for profile '{}'", profile_name))
     } else {
+        log_error("aws_profiles", format!("sso login failed profile='{}' exit={:?}", profile_name, status.code()));
         Err(format!(
             "SSO login failed for profile '{}' (exit code: {:?})",
             profile_name, status.code()
@@ -298,6 +310,7 @@ pub async fn sso_login(profile_name: String) -> Result<String, String> {
 
 /// Check whether the given profile has valid (non-expired) credentials.
 pub async fn check_profile_credentials(profile_name: String) -> Result<bool, String> {
+    log_info("aws_profiles", format!("check creds start profile='{}'", profile_name));
     let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .profile_name(&profile_name)
         .load()
@@ -305,17 +318,22 @@ pub async fn check_profile_credentials(profile_name: String) -> Result<bool, Str
     let client = aws_sdk_dynamodb::Client::new(&config);
 
     match client.list_tables().limit(1).send().await {
-        Ok(_) => Ok(true),
+        Ok(_) => {
+            log_info("aws_profiles", format!("check creds valid profile='{}'", profile_name));
+            Ok(true)
+        }
         Err(e) => {
-            let err = e.to_string().to_lowercase();
-            if err.contains("expiredtoken")
-                || err.contains("credentials expired")
-                || err.contains("expired")
-                || (err.contains("sso") && err.contains("token"))
-                || err.contains("credentials")
-            {
+            let err_str = e.to_string().to_lowercase();
+            let is_expired = err_str.contains("expiredtoken")
+                || err_str.contains("credentials expired")
+                || err_str.contains("expired")
+                || (err_str.contains("sso") && err_str.contains("token"))
+                || err_str.contains("credentials");
+            if is_expired {
+                log_warn("aws_profiles", format!("check creds expired profile='{}'", profile_name));
                 Ok(false)
             } else {
+                log_info("aws_profiles", format!("check creds ok (non-cred error) profile='{}'", profile_name));
                 Ok(true)
             }
         }
@@ -369,6 +387,7 @@ pub fn add_sso_profile(
 
 /// Delete a profile from both credential files.
 pub fn delete_profile(name: String) -> Result<(), String> {
+    log_info("aws_profiles", format!("delete profile start name='{}'", name));
     let creds_path = aws_credentials_path()?;
     let config_path = aws_config_path()?;
 
@@ -391,6 +410,7 @@ pub fn delete_profile(name: String) -> Result<(), String> {
             }
         }
         if !found {
+            log_warn("aws_profiles", format!("delete: section '{}' not found in {}", target_section, path.display()));
             return Ok(());
         }
         out.write_to_file(path)
@@ -405,6 +425,7 @@ pub fn delete_profile(name: String) -> Result<(), String> {
         format!("profile {}", name)
     };
     remove_section_from_file(&config_path, &config_section)?;
+    log_info("aws_profiles", format!("delete profile done name='{}'", name));
     Ok(())
 }
 

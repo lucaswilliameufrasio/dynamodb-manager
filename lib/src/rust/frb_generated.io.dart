@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/aws_profiles.dart';
+import 'api/dev_logs.dart';
 import 'api/dynamodb.dart';
 import 'api/simple.dart';
 import 'dart:async';
@@ -42,6 +43,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
+  DevLogEntry dco_decode_dev_log_entry(dynamic raw);
+
+  @protected
   FilterClause dco_decode_filter_clause(dynamic raw);
 
   @protected
@@ -61,6 +65,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AwsProfile> dco_decode_list_aws_profile(dynamic raw);
+
+  @protected
+  List<DevLogEntry> dco_decode_list_dev_log_entry(dynamic raw);
 
   @protected
   List<FilterClause> dco_decode_list_filter_clause(dynamic raw);
@@ -111,6 +118,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  DevLogEntry sse_decode_dev_log_entry(SseDeserializer deserializer);
+
+  @protected
   FilterClause sse_decode_filter_clause(SseDeserializer deserializer);
 
   @protected
@@ -132,6 +142,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AwsProfile> sse_decode_list_aws_profile(SseDeserializer deserializer);
+
+  @protected
+  List<DevLogEntry> sse_decode_list_dev_log_entry(SseDeserializer deserializer);
 
   @protected
   List<FilterClause> sse_decode_list_filter_clause(
@@ -192,6 +205,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_dev_log_entry(DevLogEntry self, SseSerializer serializer);
+
+  @protected
   void sse_encode_filter_clause(FilterClause self, SseSerializer serializer);
 
   @protected
@@ -218,6 +234,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_aws_profile(
     List<AwsProfile> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_dev_log_entry(
+    List<DevLogEntry> self,
     SseSerializer serializer,
   );
 

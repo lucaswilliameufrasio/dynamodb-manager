@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/dynamo_item.dart';
 import '../rust/api/aws_profiles.dart' as profiles;
 import '../controllers/workspace_controller.dart';
+import 'dev_logs_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROFILE SELECTION SCREEN
@@ -231,6 +232,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         actions: [
           if (_diagnostics != null)
             IconButton(icon: const Icon(Icons.bug_report, size: 18), onPressed: _showDiagnosticsSheet, tooltip: 'Diagnostics'),
+          IconButton(icon: const Icon(Icons.developer_mode, size: 18), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DevLogsScreen())), tooltip: 'Dev Logs'),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _initData),
           IconButton(icon: const Icon(Icons.add), onPressed: _showAddProfileSheet),
         ],
