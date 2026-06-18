@@ -15,8 +15,11 @@ class DynamoItem {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is DynamoItem && runtimeType == other.runtimeType && id == other.id;
+      other is DynamoItem &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          jsonContent == other.jsonContent;
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, jsonContent);
 }
