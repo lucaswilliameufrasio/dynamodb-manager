@@ -3,9 +3,14 @@ class DynamoItem {
   final String jsonContent;
   final bool isEmpty;
 
-  const DynamoItem({required this.id, required this.jsonContent, this.isEmpty = false});
+  const DynamoItem({
+    required this.id,
+    required this.jsonContent,
+    this.isEmpty = false,
+  });
 
-  factory DynamoItem.empty() => const DynamoItem(id: '', jsonContent: '', isEmpty: true);
+  factory DynamoItem.empty() =>
+      const DynamoItem(id: '', jsonContent: '', isEmpty: true);
 
   @override
   bool operator ==(Object other) =>

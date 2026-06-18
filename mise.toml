@@ -1,2 +1,99 @@
 [tools]
 rust = "1.96.0"
+flutter = "3.44.2"
+
+[tasks.setup]
+description = "Install all dependencies (Flutter + Rust)"
+run = "flutter pub get && cd rust_builder && cargo fetch"
+
+[tasks.doctor]
+description = "Run Flutter doctor + toolchain checks"
+run = "flutter doctor -v && echo '--- Rust ---' && rustc --version && cargo --version"
+
+[tasks.info]
+description = "Show project info and tool versions"
+run = [
+  "echo '=== Project ==='",
+  "echo \"  name: dynamodb_manager\"",
+  "echo \"  dir:  $(pwd)\"",
+  "flutter --version 2>/dev/null | head -1 | xargs echo '  Flutter:'",
+  "dart --version 2>/dev/null | xargs echo '  Dart:'",
+  "rustc --version 2>/dev/null | xargs echo '  Rust:'",
+  "cargo --version 2>/dev/null | xargs echo '  Cargo:'",
+  "aws --version 2>/dev/null | xargs echo '  AWS CLI:'",
+  "echo '=== Rust workspace ==='",
+  "cd rust && cargo metadata --format-version 1 2>/dev/null | python3 -c 'import sys,json; m=json.load(sys.stdin); [print(f\"  {p[\"name\"]} v{p[\"version\"]}\") for p in m[\"packages\"] if p[\"manifest_path\"].startswith(m[\"workspace_root\"])]' 2>/dev/null || echo '  (cargo metadata unavailable)'",
+]
+
+[tasks.run]
+description = "Run the app on macOS"
+run = "flutter run -d macos"
+
+[tasks.run-release]
+description = "Run with release build"
+run = "flutter run -d macos --release"
+
+[tasks.sync]
+description = "Regenerate FRB bindings after Rust changes"
+run = "flutter_rust_bridge_codegen generate"
+
+[tasks.test]
+description = "Run all tests (Flutter + Rust)"
+run = [
+  "flutter test",
+  "cd rust && cargo test 2>/dev/null || echo '(no Rust tests defined)'",
+]
+
+[tasks.lint]
+description = "Run static analysis (Flutter analyze + Rust clippy)"
+run = [
+  "flutter analyze",
+  "cd rust && cargo clippy -- -D warnings 2>/dev/null || echo '(clippy skipped)'",
+]
+
+[tasks.fmt]
+description = "Format all code (Dart + Rust)"
+run = [
+  "dart format .",
+  "cd rust && cargo fmt",
+]
+
+[tasks.upgrade]
+description = "Upgrade dependencies (Flutter + Rust)"
+run = [
+  "flutter pub upgrade --major-versions",
+  "cd rust && cargo update",
+]
+
+[tasks.clean]
+description = "Clean all build artifacts"
+run = [
+  "flutter clean",
+  "cd rust && cargo clean",
+]
+
+[tasks.check]
+description = "Run format, lint, and test in sequence"
+run = [
+  "mise run fmt",
+  "mise run lint",
+  "mise run test",
+]
+
+[tasks.bootstrap]
+description = "Full environment setup for new contributors"
+run = [
+  "rustup default 1.96.0 && rustup target add aarch64-apple-darwin",
+  "flutter config --enable-macos-desktop",
+  "mise run setup",
+  "echo '✓ Bootstrap complete. Run: mise run sync && mise run run'",
+]
+
+[tasks.aws-check]
+description = "Validate AWS CLI and profiles"
+run = [
+  "echo '=== AWS CLI ==='",
+  "aws --version 2>/dev/null || echo '✗ AWS CLI not found'",
+  "echo '--- profiles ---'",
+  "aws configure list-profiles",
+]

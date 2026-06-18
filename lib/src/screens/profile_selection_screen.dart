@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../models/dynamo_item.dart';
 import '../rust/api/aws_profiles.dart' as profiles;
+import '../rust/api/dynamodb.dart' as dynamodb;
 import '../controllers/workspace_controller.dart';
 import 'dev_logs_screen.dart';
 
@@ -85,9 +87,11 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(kind == 'sso'
-            ? 'Opening browser for SSO authentication...'
-            : 'Opening browser for AWS console login...'),
+        content: Text(
+          kind == 'sso'
+              ? 'Opening browser for SSO authentication...'
+              : 'Opening browser for AWS console login...',
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -119,10 +123,16 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         title: const Text('Delete Profile'),
         content: Text('Delete AWS profile "$name"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -134,7 +144,9 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         await _loadProfiles();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('$e')));
         }
       }
     }
@@ -177,21 +189,38 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _diagRow('Config path', _diagnostics!.configPath),
-              _diagRow('Config exists', _diagnostics!.configExists ? 'yes' : 'no'),
+              _diagRow(
+                'Config exists',
+                _diagnostics!.configExists ? 'yes' : 'no',
+              ),
               _diagRow('Credentials path', _diagnostics!.credentialsPath),
-              _diagRow('Credentials exists', _diagnostics!.credentialsExists ? 'yes' : 'no'),
+              _diagRow(
+                'Credentials exists',
+                _diagnostics!.credentialsExists ? 'yes' : 'no',
+              ),
               _diagRow('Capabilities', _diagnostics!.capabilities.join(', ')),
               _diagRow('Profiles found', '${_diagnostics!.profileCount}'),
               if (_diagnostics!.errors.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                const Text('Errors:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                ..._diagnostics!.errors.map((e) => Text('  • $e', style: const TextStyle(fontSize: 12))),
+                const Text(
+                  'Errors:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.redAccent,
+                  ),
+                ),
+                ..._diagnostics!.errors.map(
+                  (e) => Text('  • $e', style: const TextStyle(fontSize: 12)),
+                ),
               ],
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -205,9 +234,17 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         children: [
           SizedBox(
             width: 140,
-            child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12)),
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+            ),
           ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 12, fontFamily: 'monospace'))),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ),
         ],
       ),
     );
@@ -231,10 +268,24 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         title: const Text('AWS Profiles'),
         actions: [
           if (_diagnostics != null)
-            IconButton(icon: const Icon(Icons.bug_report, size: 18), onPressed: _showDiagnosticsSheet, tooltip: 'Diagnostics'),
-          IconButton(icon: const Icon(Icons.developer_mode, size: 18), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DevLogsScreen())), tooltip: 'Dev Logs'),
+            IconButton(
+              icon: const Icon(Icons.bug_report, size: 18),
+              onPressed: _showDiagnosticsSheet,
+              tooltip: 'Diagnostics',
+            ),
+          IconButton(
+            icon: const Icon(Icons.developer_mode, size: 18),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DevLogsScreen()),
+            ),
+            tooltip: 'Dev Logs',
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _initData),
-          IconButton(icon: const Icon(Icons.add), onPressed: _showAddProfileSheet),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _showAddProfileSheet,
+          ),
         ],
       ),
       body: _buildBody(),
@@ -251,7 +302,10 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_profilesError!, style: const TextStyle(color: Colors.redAccent)),
+            Text(
+              _profilesError!,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(onPressed: _initData, child: const Text('Retry')),
           ],
@@ -277,11 +331,15 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
       color: Colors.grey.shade900,
       child: Row(
         children: [
-          const Text('Auth methods:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+          const Text(
+            'Auth methods:',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
           const SizedBox(width: 8),
           if (_loadingCaps)
             const SizedBox(
-              width: 14, height: 14,
+              width: 14,
+              height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else ...[
@@ -295,7 +353,11 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
             const SizedBox(width: 8),
             Tooltip(
               message: _capsError!,
-              child: Icon(Icons.warning_amber, size: 14, color: Colors.orangeAccent),
+              child: Icon(
+                Icons.warning_amber,
+                size: 14,
+                color: Colors.orangeAccent,
+              ),
             ),
           ],
         ],
@@ -307,13 +369,21 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: supported ? Colors.green.withValues(alpha: 0.12) : Colors.grey.withValues(alpha: 0.12),
+        color: supported
+            ? Colors.green.withValues(alpha: 0.12)
+            : Colors.grey.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: supported ? Colors.greenAccent : Colors.grey, width: 0.5),
+        border: Border.all(
+          color: supported ? Colors.greenAccent : Colors.grey,
+          width: 0.5,
+        ),
       ),
       child: Text(
         supported ? '✓ $label' : '✗ $label',
-        style: TextStyle(fontSize: 10, color: supported ? Colors.greenAccent : Colors.grey),
+        style: TextStyle(
+          fontSize: 10,
+          color: supported ? Colors.greenAccent : Colors.grey,
+        ),
       ),
     );
   }
@@ -322,7 +392,9 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     final reasons = <String>[];
     if (_diagnostics != null) {
       if (!_diagnostics!.credentialsExists) {
-        reasons.add('✗ credentials file not found at: ${_diagnostics!.credentialsPath}');
+        reasons.add(
+          '✗ credentials file not found at: ${_diagnostics!.credentialsPath}',
+        );
       }
       if (!_diagnostics!.configExists) {
         reasons.add('✗ config file not found at: ${_diagnostics!.configPath}');
@@ -340,13 +412,22 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
           children: [
             const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text('No AWS profiles found', style: TextStyle(fontSize: 16, color: Colors.white)),
+            const Text(
+              'No AWS profiles found',
+              style: TextStyle(fontSize: 16, color: Colors.white),
+            ),
             const SizedBox(height: 8),
             if (reasons.isNotEmpty)
-              ...reasons.map((r) => Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(r, style: const TextStyle(fontSize: 11, color: Colors.grey), textAlign: TextAlign.center),
-              )),
+              ...reasons.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    r,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
             _actionChip(Icons.terminal, 'Run aws login in terminal', () async {
               final nameC = TextEditingController();
@@ -362,8 +443,14 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                     ),
                   ),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                    TextButton(onPressed: () => Navigator.pop(ctx, nameC.text.trim()), child: const Text('Use')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, nameC.text.trim()),
+                      child: const Text('Use'),
+                    ),
                   ],
                 ),
               );
@@ -377,7 +464,11 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
             _actionChip(Icons.refresh, 'Refresh profiles', _initData),
             const SizedBox(height: 8),
             if (_diagnostics != null)
-              _actionChip(Icons.bug_report, 'View diagnostics', _showDiagnosticsSheet),
+              _actionChip(
+                Icons.bug_report,
+                'View diagnostics',
+                _showDiagnosticsSheet,
+              ),
           ],
         ),
       ),
@@ -409,10 +500,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         final isLoggingIn = _loginProfile == p.name;
 
         return ListTile(
-          leading: Icon(
-            _profileIcon(p.kind),
-            color: _profileColor(p.kind),
-          ),
+          leading: Icon(_profileIcon(p.kind), color: _profileColor(p.kind)),
           title: Text(p.name, style: const TextStyle(color: Colors.white)),
           subtitle: Text(
             _profileKindLabel(p.kind),
@@ -422,23 +510,33 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isLoggingIn)
-                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               else if (p.kind == 'sso' && _hasSsoLogin)
                 TextButton(
                   onPressed: () => _doLogin(p.name, p.kind),
-                  child: const Text('Login', style: TextStyle(color: Colors.orangeAccent)),
+                  child: const Text(
+                    'Login',
+                    style: TextStyle(color: Colors.orangeAccent),
+                  ),
                 )
               else if (p.kind != 'sso' && _hasAwsLogin)
                 TextButton(
                   onPressed: () => _doLogin(p.name, p.kind),
-                  child: const Text('Login', style: TextStyle(color: Colors.lightBlueAccent)),
+                  child: const Text(
+                    'Login',
+                    style: TextStyle(color: Colors.lightBlueAccent),
+                  ),
                 ),
               PopupMenuButton<String>(
                 onSelected: (action) {
                   if (action == 'delete') _deleteProfile(p.name);
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'delete', child: Text('Delete'))
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ],
               ),
             ],
@@ -451,34 +549,52 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
 
   IconData _profileIcon(String kind) {
     switch (kind) {
-      case 'sso': return Icons.shield_outlined;
-      case 'role': return Icons.swap_horiz;
-      case 'credential_source': return Icons.cloud_outlined;
-      case 'short_term': return Icons.timer_outlined;
-      case 'static': return Icons.vpn_key_outlined;
-      default: return Icons.person_outline;
+      case 'sso':
+        return Icons.shield_outlined;
+      case 'role':
+        return Icons.swap_horiz;
+      case 'credential_source':
+        return Icons.cloud_outlined;
+      case 'short_term':
+        return Icons.timer_outlined;
+      case 'static':
+        return Icons.vpn_key_outlined;
+      default:
+        return Icons.person_outline;
     }
   }
 
   Color _profileColor(String kind) {
     switch (kind) {
-      case 'sso': return Colors.orangeAccent;
-      case 'role': return Colors.purpleAccent;
-      case 'credential_source': return Colors.tealAccent;
-      case 'short_term': return Colors.cyanAccent;
-      case 'static': return Colors.greenAccent;
-      default: return Colors.grey;
+      case 'sso':
+        return Colors.orangeAccent;
+      case 'role':
+        return Colors.purpleAccent;
+      case 'credential_source':
+        return Colors.tealAccent;
+      case 'short_term':
+        return Colors.cyanAccent;
+      case 'static':
+        return Colors.greenAccent;
+      default:
+        return Colors.grey;
     }
   }
 
   String _profileKindLabel(String kind) {
     switch (kind) {
-      case 'sso': return 'IAM Identity Center';
-      case 'role': return 'IAM Role';
-      case 'credential_source': return 'Credential Source';
-      case 'short_term': return 'Temporary Credentials';
-      case 'static': return 'Access Key';
-      default: return kind;
+      case 'sso':
+        return 'IAM Identity Center';
+      case 'role':
+        return 'IAM Role';
+      case 'credential_source':
+        return 'Credential Source';
+      case 'short_term':
+        return 'Temporary Credentials';
+      case 'static':
+        return 'Access Key';
+      default:
+        return kind;
     }
   }
 }
@@ -510,18 +626,25 @@ class _AddProfileSheetState extends State<_AddProfileSheet> {
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 16, right: 16, top: 16,
+        left: 16,
+        right: 16,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Add Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Add Profile',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           _OptionTile(
             icon: Icons.login,
-            title: loginAvailable ? 'Login with AWS Console' : 'Login with AWS Console (not available)',
+            title: loginAvailable
+                ? 'Login with AWS Console'
+                : 'Login with AWS Console (not available)',
             subtitle: loginAvailable
                 ? 'Opens browser to sign in with your AWS Console session'
                 : 'AWS CLI does not support `aws login` on this machine',
@@ -532,7 +655,9 @@ class _AddProfileSheetState extends State<_AddProfileSheet> {
           const SizedBox(height: 8),
           _OptionTile(
             icon: Icons.shield_outlined,
-            title: ssoAvailable ? 'Configure IAM Identity Center' : 'Configure IAM Identity Center (not available)',
+            title: ssoAvailable
+                ? 'Configure IAM Identity Center'
+                : 'Configure IAM Identity Center (not available)',
             subtitle: ssoAvailable
                 ? 'Set up an SSO profile with start URL, region, account, role'
                 : 'AWS CLI does not support `aws configure sso` on this machine',
@@ -544,10 +669,14 @@ class _AddProfileSheetState extends State<_AddProfileSheet> {
           _OptionTile(
             icon: Icons.refresh,
             title: 'Refresh & detect existing profiles',
-            subtitle: 'Re-scan credential files for profiles you created via CLI',
+            subtitle:
+                'Re-scan credential files for profiles you created via CLI',
             color: Colors.grey,
             enabled: true,
-            onTap: () { Navigator.pop(context); widget.onDone(); },
+            onTap: () {
+              Navigator.pop(context);
+              widget.onDone();
+            },
           ),
         ],
       ),
@@ -600,9 +729,17 @@ class _OptionTile extends StatelessWidget {
         opacity: enabled ? 1.0 : 0.5,
         child: ListTile(
           leading: Icon(icon, color: color),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-          subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          trailing: enabled ? const Icon(Icons.chevron_right) : const Icon(Icons.block, size: 16, color: Colors.grey),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+          trailing: enabled
+              ? const Icon(Icons.chevron_right)
+              : const Icon(Icons.block, size: 16, color: Colors.grey),
           onTap: enabled ? onTap : null,
         ),
       ),
@@ -637,7 +774,10 @@ class _LoginProfileDialogState extends State<_LoginProfileDialog> {
       setState(() => _error = 'Profile name is required.');
       return;
     }
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       await profiles.awsLogin(profileName: name);
       if (mounted) Navigator.pop(context);
@@ -666,16 +806,26 @@ class _LoginProfileDialogState extends State<_LoginProfileDialog> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
             ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _busy ? null : _login,
           child: _busy
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Login'),
         ),
       ],
@@ -721,12 +871,17 @@ class _SsoFormSheetState extends State<_SsoFormSheet> {
       setState(() => _error = 'Profile name is required.');
       return;
     }
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
 
     try {
       await profiles.addSsoProfile(
         name: name,
-        ssoSession: _sessionCtrl.text.trim().isNotEmpty ? _sessionCtrl.text.trim() : name,
+        ssoSession: _sessionCtrl.text.trim().isNotEmpty
+            ? _sessionCtrl.text.trim()
+            : name,
         ssoStartUrl: _startUrlCtrl.text.trim(),
         ssoRegion: _ssoRegionCtrl.text.trim(),
         ssoAccountId: _accountCtrl.text.trim(),
@@ -744,7 +899,9 @@ class _SsoFormSheetState extends State<_SsoFormSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        left: 16, right: 16, top: 16,
+        left: 16,
+        right: 16,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16,
       ),
       child: SingleChildScrollView(
@@ -752,65 +909,92 @@ class _SsoFormSheetState extends State<_SsoFormSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Configure IAM Identity Center', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Configure IAM Identity Center',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
               decoration: const InputDecoration(
-                labelText: 'Profile Name', hintText: 'e.g. my-sso-profile', border: OutlineInputBorder(),
+                labelText: 'Profile Name',
+                hintText: 'e.g. my-sso-profile',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _sessionCtrl,
               decoration: const InputDecoration(
-                labelText: 'SSO Session Name', hintText: 'Leave empty to use profile name', border: OutlineInputBorder(),
+                labelText: 'SSO Session Name',
+                hintText: 'Leave empty to use profile name',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _startUrlCtrl,
               decoration: const InputDecoration(
-                labelText: 'SSO Start URL', hintText: 'https://my-sso-portal.awsapps.com/start', border: OutlineInputBorder(),
+                labelText: 'SSO Start URL',
+                hintText: 'https://my-sso-portal.awsapps.com/start',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _ssoRegionCtrl,
               decoration: const InputDecoration(
-                labelText: 'SSO Region', hintText: 'us-east-1', border: OutlineInputBorder(),
+                labelText: 'SSO Region',
+                hintText: 'us-east-1',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _accountCtrl,
               decoration: const InputDecoration(
-                labelText: 'SSO Account ID', hintText: '123456789012', border: OutlineInputBorder(),
+                labelText: 'SSO Account ID',
+                hintText: '123456789012',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _roleCtrl,
               decoration: const InputDecoration(
-                labelText: 'SSO Role Name', hintText: 'AdministratorAccess', border: OutlineInputBorder(),
+                labelText: 'SSO Role Name',
+                hintText: 'AdministratorAccess',
+                border: OutlineInputBorder(),
               ),
             ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
                   child: FilledButton(
                     onPressed: _saving ? null : _save,
                     child: _saving
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Save & Login Later'),
                   ),
                 ),
@@ -851,8 +1035,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         return Scaffold(
           body: Row(
             children: [
-              SizedBox(width: c.sidebarWidth, child: _SidebarPane(controller: c)),
-              _ResizableDivider(onDrag: (details) => c.resizeSidebar(details.delta.dx)),
+              SizedBox(
+                width: c.sidebarWidth,
+                child: _SidebarPane(controller: c),
+              ),
+              _ResizableDivider(
+                onDrag: (details) => c.resizeSidebar(details.delta.dx),
+              ),
               Expanded(child: _MainWorkspacePane(controller: c)),
             ],
           ),
@@ -881,13 +1070,24 @@ class _SidebarPane extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(controller.profile, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
+                child: Text(
+                  controller.profile,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.logout, size: 16, color: Colors.grey),
                 tooltip: 'Change profile',
                 onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => ProfileSelectionScreen(controller: controller)),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProfileSelectionScreen(controller: controller),
+                  ),
                 ),
               ),
             ],
@@ -899,11 +1099,21 @@ class _SidebarPane extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   const SizedBox(height: 12),
-                  const Text('Connecting to AWS…', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text(
+                    'Connecting to AWS…',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   const SizedBox(height: 4),
-                  Text(controller.profile, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(
+                    controller.profile,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -919,21 +1129,31 @@ class _SidebarPane extends StatelessWidget {
                   children: [
                     Text(
                       controller.tablesError!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 11,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
-                    TextButton(onPressed: () => controller.loadTables(), child: const Text('Retry')),
+                    TextButton(
+                      onPressed: () => controller.loadTables(),
+                      child: const Text('Retry'),
+                    ),
                     const SizedBox(height: 4),
                     TextButton(
                       onPressed: () {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
-                            builder: (_) => ProfileSelectionScreen(controller: controller),
+                            builder: (_) =>
+                                ProfileSelectionScreen(controller: controller),
                           ),
                         );
                       },
-                      child: const Text('Back to profiles', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      child: const Text(
+                        'Back to profiles',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
                     ),
                   ],
                 ),
@@ -949,7 +1169,11 @@ class _SidebarPane extends StatelessWidget {
                 return ListTile(
                   dense: true,
                   leading: const Icon(Icons.table_chart_outlined, size: 16),
-                  title: Text(table, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                  title: Text(
+                    table,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
                   onTap: () => controller.openTable(table),
                 );
               },
@@ -975,7 +1199,12 @@ class _MainWorkspacePane extends StatelessWidget {
       listenable: c,
       builder: (context, _) {
         if (c.activeTable == null) {
-          return const Center(child: Text('Nenhuma tabela selecionada.', style: TextStyle(color: Colors.grey)));
+          return const Center(
+            child: Text(
+              'Nenhuma tabela selecionada.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
         }
         return Column(
           children: [
@@ -1013,13 +1242,29 @@ class _TabBarArea extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: isActive ? Colors.grey.shade800 : Colors.transparent,
-                border: Border(bottom: BorderSide(color: isActive ? Colors.blueAccent : Colors.transparent, width: 2)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isActive ? Colors.blueAccent : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
               ),
               child: Row(
                 children: [
-                  Text(table, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
+                  Text(
+                    table,
+                    style: TextStyle(
+                      fontWeight: isActive
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  GestureDetector(onTap: () => controller.closeTable(table), child: const Icon(Icons.close, size: 14)),
+                  GestureDetector(
+                    onTap: () => controller.closeTable(table),
+                    child: const Icon(Icons.close, size: 14),
+                  ),
                 ],
               ),
             ),
@@ -1044,18 +1289,37 @@ class _TableDashboard extends StatelessWidget {
     return Column(
       children: [
         Container(
-          height: 80, padding: const EdgeInsets.all(12), color: Colors.grey.shade900,
+          height: 80,
+          padding: const EdgeInsets.all(12),
+          color: Colors.grey.shade900,
           child: Row(
             children: [
               Expanded(
                 child: Row(
                   children: [
-                    IconButton(icon: const Icon(Icons.refresh, size: 18), tooltip: 'Refresh items', onPressed: () => c.refreshItems()),
+                    IconButton(
+                      icon: const Icon(Icons.analytics, size: 18),
+                      tooltip: 'Table metrics',
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => _MetricsModal(controller: c),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Refresh items',
+                      onPressed: () => c.refreshItems(),
+                    ),
                     if (c.hasMorePages)
                       TextButton.icon(
-                        onPressed: c.itemsLoading ? null : () => c.loadNextPage(),
+                        onPressed: c.itemsLoading
+                            ? null
+                            : () => c.loadNextPage(),
                         icon: const Icon(Icons.more_horiz, size: 18),
-                        label: const Text('Load more', style: TextStyle(fontSize: 12)),
+                        label: const Text(
+                          'Load more',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                   ],
                 ),
@@ -1063,7 +1327,10 @@ class _TableDashboard extends StatelessWidget {
               TextButton.icon(
                 onPressed: () => c.toggleItemDetails(),
                 icon: const Icon(Icons.data_object, size: 16),
-                label: Text(c.showItemDetails ? 'Hide JSON' : 'Show JSON', style: const TextStyle(fontSize: 12)),
+                label: Text(
+                  c.showItemDetails ? 'Hide JSON' : 'Show JSON',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -1073,8 +1340,13 @@ class _TableDashboard extends StatelessWidget {
             children: [
               Expanded(child: _buildItemsList(c)),
               if (c.showItemDetails) ...[
-                _ResizableDivider(onDrag: (details) => c.resizeDetails(details.delta.dx)),
-                SizedBox(width: c.detailsWidth, child: _ItemDetailsPanel(controller: c)),
+                _ResizableDivider(
+                  onDrag: (details) => c.resizeDetails(details.delta.dx),
+                ),
+                SizedBox(
+                  width: c.detailsWidth,
+                  child: _ItemDetailsPanel(controller: c),
+                ),
               ],
             ],
           ),
@@ -1084,8 +1356,17 @@ class _TableDashboard extends StatelessWidget {
   }
 
   Widget _buildItemsList(WorkspaceController c) {
-    if (c.itemsLoading && c.currentItems.isEmpty) return const Center(child: CircularProgressIndicator());
-    if (c.itemsError != null && c.currentItems.isEmpty) return Center(child: Text(c.itemsError!, style: const TextStyle(color: Colors.redAccent)));
+    if (c.itemsLoading && c.currentItems.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (c.itemsError != null && c.currentItems.isEmpty) {
+      return Center(
+        child: Text(
+          c.itemsError!,
+          style: const TextStyle(color: Colors.redAccent),
+        ),
+      );
+    }
     return ListView.separated(
       itemCount: c.currentItems.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
@@ -1095,7 +1376,10 @@ class _TableDashboard extends StatelessWidget {
         return ListTile(
           selected: isSelected,
           selectedTileColor: Colors.blue.withValues(alpha: 0.2),
-          title: Text(item.id, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+          title: Text(
+            item.id,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          ),
           onTap: () => c.selectItem(index),
         );
       },
@@ -1148,7 +1432,11 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
     try {
       await widget.controller.saveItem(_textController.text);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      }
     }
     setState(() => _saving = false);
   }
@@ -1158,7 +1446,11 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
     try {
       await widget.controller.deleteItem();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
     }
     setState(() => _deleting = false);
   }
@@ -1169,31 +1461,58 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
     if (active.isEmpty) {
       return Container(
         color: Colors.grey.shade900,
-        child: const Center(child: Text('Nenhum item selecionado', style: TextStyle(color: Colors.grey))),
+        child: const Center(
+          child: Text(
+            'Nenhum item selecionado',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
       );
     }
     return Container(
-      color: Colors.grey.shade900, padding: const EdgeInsets.all(16),
+      color: Colors.grey.shade900,
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Editar Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text(
+                'Editar Item',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
               Row(
                 children: [
                   IconButton(
                     icon: _deleting
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.delete, color: Colors.redAccent, size: 20),
-                    tooltip: 'Remover Item', onPressed: _deleting ? null : _delete,
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.delete,
+                            color: Colors.redAccent,
+                            size: 20,
+                          ),
+                    tooltip: 'Remover Item',
+                    onPressed: _deleting ? null : _delete,
                   ),
                   IconButton(
                     icon: _saving
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.save, color: Colors.greenAccent, size: 20),
-                    tooltip: 'Salvar JSON', onPressed: _saving ? null : _save,
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.save,
+                            color: Colors.greenAccent,
+                            size: 20,
+                          ),
+                    tooltip: 'Salvar JSON',
+                    onPressed: _saving ? null : _save,
                   ),
                 ],
               ),
@@ -1203,9 +1522,18 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
           Expanded(
             child: TextField(
               controller: _textController,
-              maxLines: null, expands: true,
-              style: const TextStyle(fontFamily: 'monospace', color: Colors.greenAccent, fontSize: 12),
-              decoration: const InputDecoration(border: InputBorder.none, filled: true, fillColor: Colors.black26),
+              maxLines: null,
+              expands: true,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                color: Colors.greenAccent,
+                fontSize: 12,
+              ),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                filled: true,
+                fillColor: Colors.black26,
+              ),
             ),
           ),
         ],
@@ -1230,10 +1558,466 @@ class _ResizableDivider extends StatelessWidget {
         behavior: HitTestBehavior.translucent,
         onPanUpdate: onDrag,
         child: Container(
-          width: 6, color: Colors.transparent,
-          child: Center(child: Container(width: 1, color: Colors.grey.shade800)),
+          width: 6,
+          color: Colors.transparent,
+          child: Center(
+            child: Container(width: 1, color: Colors.grey.shade800),
+          ),
         ),
       ),
     );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// METRICS MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _MetricsModal extends StatefulWidget {
+  final WorkspaceController controller;
+  const _MetricsModal({required this.controller});
+
+  @override
+  State<_MetricsModal> createState() => _MetricsModalState();
+}
+
+class _MetricsModalState extends State<_MetricsModal> {
+  dynamodb.TableSummary? _summary;
+  List<dynamodb.AttributeHint>? _attributes;
+  bool _loadingSummary = true;
+  bool _loadingAttributes = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    setState(() {
+      _loadingSummary = true;
+      _error = null;
+    });
+    try {
+      final c = widget.controller;
+      final summary = await dynamodb.describeTable(
+        profile: c.profile,
+        regionOverride: c.regionOverride,
+        endpointOverride: c.endpointOverride,
+        tableName: c.activeTable!,
+      );
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          _loadingSummary = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loadingSummary = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAttributes() async {
+    setState(() {
+      _loadingAttributes = true;
+    });
+    try {
+      final c = widget.controller;
+      final attrs = await dynamodb.listTableAttributes(
+        profile: c.profile,
+        regionOverride: c.regionOverride,
+        endpointOverride: c.endpointOverride,
+        tableName: c.activeTable!,
+        sampleLimit: 100,
+      );
+      if (mounted) {
+        setState(() {
+          _attributes = attrs;
+          _loadingAttributes = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingAttributes = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Attribute sampling failed: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.grey.shade900,
+      title: Text(
+        _summary?.name ?? 'Table Metrics',
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+      content: SizedBox(
+        width: 520,
+        child: _loadingSummary
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            : _error != null
+            ? Center(
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              )
+            : _summary == null
+            ? const Center(child: Text('No data available'))
+            : _buildContent(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent() {
+    final s = _summary!;
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Key metrics row ──
+          Row(
+            children: [
+              _metricCard('Status', s.status, Icons.check_circle_outline),
+              const SizedBox(width: 8),
+              _metricCard(
+                'Billing',
+                s.billingMode ?? 'N/A',
+                Icons.attach_money,
+              ),
+              const SizedBox(width: 8),
+              _metricCard('Items', _fmtNum(s.itemCount), Icons.inventory_2),
+              const SizedBox(width: 8),
+              _metricCard(
+                'Size',
+                s.tableSizeBytes != null ? _fmtBytes(s.tableSizeBytes!) : 'N/A',
+                Icons.storage,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // ── Key schema ──
+          if (s.pk != null) ...[
+            _sectionTitle('Key Schema'),
+            Row(
+              children: [
+                _metricCard('Partition Key', s.pk!, Icons.vpn_key),
+                if (s.sk != null) ...[
+                  const SizedBox(width: 8),
+                  _metricCard('Sort Key', s.sk!, Icons.vpn_key),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // ── Indexes ──
+          if (s.gsis.isNotEmpty) ...[
+            _sectionTitle('Global Secondary Indexes (${s.gsis.length})'),
+            const SizedBox(height: 6),
+            ...s.gsis.map(
+              (gsi) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '  • $gsi',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (s.lsis.isNotEmpty) ...[
+            _sectionTitle('Local Secondary Indexes (${s.lsis.length})'),
+            const SizedBox(height: 6),
+            ...s.lsis.map(
+              (lsi) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '  • $lsi',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── Stream ──
+          if (s.streamSpec != null && s.streamSpec != 'disabled') ...[
+            _sectionTitle('Stream'),
+            Text(
+              s.streamSpec!,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── Divider before attributes ──
+          const Divider(color: Colors.grey, height: 1),
+          const SizedBox(height: 12),
+
+          // ── Attribute analysis ──
+          _sectionTitle('Attribute Types'),
+          const SizedBox(height: 4),
+          Text(
+            'Sample up to 100 items to discover attribute types. '
+            'This generates read costs on your table.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 8),
+          if (_attributes == null)
+            OutlinedButton.icon(
+              onPressed: _loadingAttributes ? null : _loadAttributes,
+              icon: _loadingAttributes
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.analytics_outlined, size: 16),
+              label: Text(
+                _loadingAttributes ? 'Sampling…' : 'Load Attribute Types',
+              ),
+            )
+          else
+            _buildAttributeChart(),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 13,
+        color: Colors.blueAccent,
+      ),
+    );
+  }
+
+  Widget _metricCard(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 14, color: Colors.blueAccent),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttributeChart() {
+    if (_attributes == null || _attributes!.isEmpty) {
+      return const Text(
+        'No attributes found in sample.',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      );
+    }
+
+    // Count how many attributes use each DynamoDB type
+    final Map<String, int> typeCounts = {};
+    for (final attr in _attributes!) {
+      for (final t in attr.types) {
+        typeCounts[t] = (typeCounts[t] ?? 0) + 1;
+      }
+    }
+
+    final sortedTypes = typeCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final total = sortedTypes.fold(0, (sum, e) => sum + e.value);
+
+    const colors = [
+      Colors.blueAccent,
+      Colors.greenAccent,
+      Colors.orangeAccent,
+      Colors.purpleAccent,
+      Colors.redAccent,
+      Colors.tealAccent,
+      Colors.pinkAccent,
+      Colors.yellowAccent,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${_attributes!.length} attributes found across $total type occurrences:',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 180,
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: sortedTypes.first.value.toDouble() + 1,
+              barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                    final entry = sortedTypes[group.x.toInt()];
+                    return BarTooltipItem(
+                      '${entry.key}: ${entry.value}',
+                      const TextStyle(color: Colors.white, fontSize: 12),
+                    );
+                  },
+                ),
+              ),
+              titlesData: FlTitlesData(
+                show: true,
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (value, meta) {
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= sortedTypes.length) {
+                        return const SizedBox.shrink();
+                      }
+                      // Shorten type names for display
+                      final label = sortedTypes[idx].key.replaceAll('_', '\n');
+                      return SideTitleWidget(
+                        meta: meta,
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      );
+                    },
+                    reservedSize: 32,
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              gridData: const FlGridData(show: false),
+              barGroups: sortedTypes.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final count = entry.value.value;
+                return BarChartGroupData(
+                  x: idx,
+                  barRods: [
+                    BarChartRodData(
+                      toY: count.toDouble(),
+                      color: colors[idx % colors.length],
+                      width: 20,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(4),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Legend
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: sortedTypes.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final type = entry.value.key;
+            final count = entry.value.value;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: colors[idx % colors.length],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$type ($count)',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  String _fmtNum(dynamic n) {
+    if (n == null) return 'N/A';
+    final i = n is int ? n : (n as int);
+    if (i >= 1000000) return '${(i / 1000000).toStringAsFixed(1)}M';
+    if (i >= 1000) return '${(i / 1000).toStringAsFixed(1)}K';
+    return i.toString();
+  }
+
+  String _fmtBytes(int bytes) {
+    if (bytes >= 1073741824) {
+      return '${(bytes / 1073741824).toStringAsFixed(1)} GB';
+    }
+    if (bytes >= 1048576) return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '$bytes B';
   }
 }

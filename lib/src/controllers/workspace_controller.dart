@@ -165,10 +165,9 @@ class WorkspaceController extends ChangeNotifier {
         final data = jsonDecode(jsonStr);
         final id = _extractItemLabel(data);
         const encoder = JsonEncoder.withIndent('  ');
-        _currentItems.add(DynamoItem(
-          id: id,
-          jsonContent: encoder.convert(data),
-        ));
+        _currentItems.add(
+          DynamoItem(id: id, jsonContent: encoder.convert(data)),
+        );
       }
 
       _lastEvaluatedKeyJson = result.lastEvaluatedKeyJson;

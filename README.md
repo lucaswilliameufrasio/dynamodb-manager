@@ -22,24 +22,44 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-flutter pub get
-cd rust_builder && cargo fetch && cd ..
+# 1. Install all dependencies
+mise run setup
 
 # 2. Run the app
-flutter run -d macos
+mise run run
 ```
 
 After login, the app reads `~/.aws/credentials` and `~/.aws/config` to list your profiles.
 Click a profile to open the workspace, where you can list tables, scan items, and inspect table metadata.
 
-## Regenerating FFI bindings
-
-After changing Rust API code, regenerate the Dart bindings:
+Or, without `mise`:
 
 ```bash
-flutter_rust_bridge_codegen generate && flutter run
+flutter pub get && cd rust_builder && cargo fetch && cd ..
+flutter run -d macos
 ```
+
+## Development Commands
+
+Available via `mise` (or `make`):
+
+| Command             | Description                            |
+|---------------------|----------------------------------------|
+| `mise run setup`    | Install Flutter + Rust dependencies    |
+| `mise run doctor`   | Run Flutter doctor + Rust version check|
+| `mise run info`     | Show project info and tool versions    |
+| `mise run run`      | Run the app on macOS                   |
+| `mise run sync`     | Regenerate FRB bindings (after Rust changes) |
+| `mise run test`     | Run Flutter tests + Rust tests         |
+| `mise run lint`     | Run Flutter analyze + Rust clippy      |
+| `mise run fmt`      | Format Dart + Rust code                |
+| `mise run upgrade`  | Upgrade all dependencies               |
+| `mise run clean`    | Clean all build artifacts              |
+| `mise run check`    | Format → lint → test pipeline          |
+| `mise run bootstrap`| Full environment setup for new devs    |
+| `mise run aws-check`| Validate AWS CLI and profiles          |
+
+All commands also work with `make <command>` (e.g. `make setup`, `make sync`).
 
 ## Project Structure
 

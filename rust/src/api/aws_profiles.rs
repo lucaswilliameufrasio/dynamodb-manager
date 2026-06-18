@@ -1,4 +1,4 @@
-use crate::api::dev_logs::{log_info, log_warn, log_error};
+use crate::api::dev_logs::{log_error, log_info, log_warn};
 use ini::Ini;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -41,7 +41,13 @@ fn home_dir() -> Result<PathBuf, String> {
     let mut result: *mut libc::passwd = std::ptr::null_mut();
 
     let ret = unsafe {
-        libc::getpwuid_r(uid, &mut pwd, buf.as_mut_ptr() as *mut i8, bufsize, &mut result)
+        libc::getpwuid_r(
+            uid,
+            &mut pwd,
+            buf.as_mut_ptr() as *mut i8,
+            bufsize,
+            &mut result,
+        )
     };
 
     if ret == 0 && !result.is_null() {
@@ -73,7 +79,11 @@ fn aws_config_path() -> Result<PathBuf, String> {
 }
 
 fn normalize_config_profile_name(section: &str) -> String {
-    section.strip_prefix("profile ").unwrap_or(section).trim().to_string()
+    section
+        .strip_prefix("profile ")
+        .unwrap_or(section)
+        .trim()
+        .to_string()
 }
 
 // ─── Capability detection ─────────────────────────────────────────────────
@@ -217,18 +227,25 @@ pub fn list_local_aws_profiles() -> Result<Vec<AwsProfile>, String> {
                 let section_name = section.unwrap_or("default").to_string();
                 let profile_name = normalize_config_profile_name(&section_name);
 
-                if section_name.starts_with("sso-session ") || section_name.starts_with("services ") {
+                if section_name.starts_with("sso-session ") || section_name.starts_with("services ")
+                {
                     continue;
                 }
 
-                let kind = if props.contains_key("sso_session") || props.contains_key("sso_start_url") {
+                let kind = if props.contains_key("sso_session")
+                    || props.contains_key("sso_start_url")
+                {
                     "sso".to_string()
-                } else if props.contains_key("role_arn") && props.contains_key("credential_source") {
+                } else if props.contains_key("role_arn") && props.contains_key("credential_source")
+                {
                     "credential_source".to_string()
                 } else if props.contains_key("role_arn") {
                     "role".to_string()
                 } else {
-                    profiles.get(&profile_name).cloned().unwrap_or_else(|| "static".to_string())
+                    profiles
+                        .get(&profile_name)
+                        .cloned()
+                        .unwrap_or_else(|| "static".to_string())
                 };
 
                 profiles.entry(profile_name).or_insert(kind);
@@ -261,7 +278,10 @@ async fn check_aws_cli() -> Result<(), String> {
 
 /// Authenticate a non-SSO profile via `aws login --profile <name>`.
 pub async fn aws_login(profile_name: String) -> Result<String, String> {
-    log_info("aws_profiles", format!("aws login start profile='{}'", profile_name));
+    log_info(
+        "aws_profiles",
+        format!("aws login start profile='{}'", profile_name),
+    );
     check_aws_cli().await?;
     let status = tokio::process::Command::new("aws")
         .arg("login")
@@ -272,20 +292,37 @@ pub async fn aws_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws login`: {}", e))?;
 
     if status.success() {
-        log_info("aws_profiles", format!("aws login success profile='{}'", profile_name));
-        Ok(format!("AWS login successful for profile '{}'", profile_name))
+        log_info(
+            "aws_profiles",
+            format!("aws login success profile='{}'", profile_name),
+        );
+        Ok(format!(
+            "AWS login successful for profile '{}'",
+            profile_name
+        ))
     } else {
-        log_error("aws_profiles", format!("aws login failed profile='{}' exit={:?}", profile_name, status.code()));
+        log_error(
+            "aws_profiles",
+            format!(
+                "aws login failed profile='{}' exit={:?}",
+                profile_name,
+                status.code()
+            ),
+        );
         Err(format!(
             "AWS login failed for profile '{}' (exit code: {:?})",
-            profile_name, status.code()
+            profile_name,
+            status.code()
         ))
     }
 }
 
 /// Authenticate an SSO profile via `aws sso login --profile <name>`.
 pub async fn sso_login(profile_name: String) -> Result<String, String> {
-    log_info("aws_profiles", format!("sso login start profile='{}'", profile_name));
+    log_info(
+        "aws_profiles",
+        format!("sso login start profile='{}'", profile_name),
+    );
     check_aws_cli().await?;
     let status = tokio::process::Command::new("aws")
         .arg("sso")
@@ -297,20 +334,37 @@ pub async fn sso_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws sso login`: {}", e))?;
 
     if status.success() {
-        log_info("aws_profiles", format!("sso login success profile='{}'", profile_name));
-        Ok(format!("SSO login successful for profile '{}'", profile_name))
+        log_info(
+            "aws_profiles",
+            format!("sso login success profile='{}'", profile_name),
+        );
+        Ok(format!(
+            "SSO login successful for profile '{}'",
+            profile_name
+        ))
     } else {
-        log_error("aws_profiles", format!("sso login failed profile='{}' exit={:?}", profile_name, status.code()));
+        log_error(
+            "aws_profiles",
+            format!(
+                "sso login failed profile='{}' exit={:?}",
+                profile_name,
+                status.code()
+            ),
+        );
         Err(format!(
             "SSO login failed for profile '{}' (exit code: {:?})",
-            profile_name, status.code()
+            profile_name,
+            status.code()
         ))
     }
 }
 
 /// Check whether the given profile has valid (non-expired) credentials.
 pub async fn check_profile_credentials(profile_name: String) -> Result<bool, String> {
-    log_info("aws_profiles", format!("check creds start profile='{}'", profile_name));
+    log_info(
+        "aws_profiles",
+        format!("check creds start profile='{}'", profile_name),
+    );
     let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .profile_name(&profile_name)
         .load()
@@ -319,7 +373,10 @@ pub async fn check_profile_credentials(profile_name: String) -> Result<bool, Str
 
     match client.list_tables().limit(1).send().await {
         Ok(_) => {
-            log_info("aws_profiles", format!("check creds valid profile='{}'", profile_name));
+            log_info(
+                "aws_profiles",
+                format!("check creds valid profile='{}'", profile_name),
+            );
             Ok(true)
         }
         Err(e) => {
@@ -330,10 +387,16 @@ pub async fn check_profile_credentials(profile_name: String) -> Result<bool, Str
                 || (err_str.contains("sso") && err_str.contains("token"))
                 || err_str.contains("credentials");
             if is_expired {
-                log_warn("aws_profiles", format!("check creds expired profile='{}'", profile_name));
+                log_warn(
+                    "aws_profiles",
+                    format!("check creds expired profile='{}'", profile_name),
+                );
                 Ok(false)
             } else {
-                log_info("aws_profiles", format!("check creds ok (non-cred error) profile='{}'", profile_name));
+                log_info(
+                    "aws_profiles",
+                    format!("check creds ok (non-cred error) profile='{}'", profile_name),
+                );
                 Ok(true)
             }
         }
@@ -387,7 +450,10 @@ pub fn add_sso_profile(
 
 /// Delete a profile from both credential files.
 pub fn delete_profile(name: String) -> Result<(), String> {
-    log_info("aws_profiles", format!("delete profile start name='{}'", name));
+    log_info(
+        "aws_profiles",
+        format!("delete profile start name='{}'", name),
+    );
     let creds_path = aws_credentials_path()?;
     let config_path = aws_config_path()?;
 
@@ -410,7 +476,14 @@ pub fn delete_profile(name: String) -> Result<(), String> {
             }
         }
         if !found {
-            log_warn("aws_profiles", format!("delete: section '{}' not found in {}", target_section, path.display()));
+            log_warn(
+                "aws_profiles",
+                format!(
+                    "delete: section '{}' not found in {}",
+                    target_section,
+                    path.display()
+                ),
+            );
             return Ok(());
         }
         out.write_to_file(path)
@@ -425,11 +498,14 @@ pub fn delete_profile(name: String) -> Result<(), String> {
         format!("profile {}", name)
     };
     remove_section_from_file(&config_path, &config_section)?;
-    log_info("aws_profiles", format!("delete profile done name='{}'", name));
+    log_info(
+        "aws_profiles",
+        format!("delete profile done name='{}'", name),
+    );
     Ok(())
 }
 
-fn ensure_aws_dir(path: &PathBuf) -> Result<(), String> {
+fn ensure_aws_dir(path: &std::path::Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create ~/.aws directory: {}", e))?;

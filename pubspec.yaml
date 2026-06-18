@@ -37,6 +37,7 @@ dependencies:
   rust_lib_dynamodb_manager:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
+  fl_chart: ^0.70.2
 
 dev_dependencies:
   flutter_test:
