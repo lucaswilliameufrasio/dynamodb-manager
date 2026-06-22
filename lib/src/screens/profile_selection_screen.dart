@@ -1391,6 +1391,8 @@ class _TableDashboard extends StatelessWidget {
 // ITEM DETAILS PANEL
 // ═══════════════════════════════════════════════════════════════════════════
 
+enum _SwitchAction { cancel, discard, saveAndSwitch }
+
 class _ItemDetailsPanel extends StatefulWidget {
   final WorkspaceController controller;
   const _ItemDetailsPanel({required this.controller});
@@ -1404,38 +1406,117 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
   DynamoItem? _trackedItem;
   bool _saving = false;
   bool _deleting = false;
+  bool _dirty = false;
+  bool _suppressDirty = false;
 
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    _textController.addListener(_onTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncToItem());
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final active = widget.controller.activeItem;
-    if (active != _trackedItem) {
-      _trackedItem = active;
-      _textController.text = active.jsonContent;
+  void didUpdateWidget(covariant _ItemDetailsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newActive = widget.controller.activeItem;
+    if (newActive != _trackedItem) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncToItem();
+      });
+    }
+  }
+
+  void _onTextChanged() {
+    if (_suppressDirty || _trackedItem == null || _trackedItem!.isEmpty) return;
+    if (_textController.text != _trackedItem!.jsonContent) {
+      if (!_dirty) setState(() => _dirty = true);
     }
   }
 
   @override
   void dispose() {
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncToItem() async {
+    final active = widget.controller.activeItem;
+    if (active == _trackedItem || active.isEmpty) return;
+
+    if (_dirty) {
+      final action = await showDialog<_SwitchAction>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Unsaved Changes'),
+          content: const Text(
+            'The current item has unsaved changes. What do you want to do?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _SwitchAction.cancel),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _SwitchAction.discard),
+              child: const Text('Discard & Switch',
+                  style: TextStyle(color: Colors.redAccent)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _SwitchAction.saveAndSwitch),
+              child: const Text('Save & Switch',
+                  style: TextStyle(color: Colors.greenAccent)),
+            ),
+          ],
+        ),
+      );
+
+      if (action == null || action == _SwitchAction.cancel) {
+        widget.controller.revertSelection();
+        return;
+      }
+
+      if (action == _SwitchAction.saveAndSwitch) {
+        _saving = true;
+        try {
+          await widget.controller.saveItem(_textController.text);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Save failed: $e')),
+            );
+          }
+          _saving = false;
+          widget.controller.revertSelection();
+          return;
+        }
+        _saving = false;
+      }
+    }
+
+    _loadItem(active);
+  }
+
+  void _loadItem(DynamoItem item) {
+    _trackedItem = item;
+    _suppressDirty = true;
+    _textController.text = item.jsonContent;
+    _suppressDirty = false;
+    _dirty = false;
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
       await widget.controller.saveItem(_textController.text);
+      _dirty = false;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save failed: $e')),
+        );
       }
     }
     setState(() => _saving = false);

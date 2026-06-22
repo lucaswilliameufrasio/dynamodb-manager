@@ -124,6 +124,7 @@ class WorkspaceController extends ChangeNotifier {
   String? _itemsError;
   String? _lastEvaluatedKeyJson;
   int? _activeItemIndex;
+  int? _prevActiveItemIndex;
 
   List<DynamoItem> get currentItems => List.unmodifiable(_currentItems);
   bool get itemsLoading => _itemsLoading;
@@ -203,9 +204,18 @@ class WorkspaceController extends ChangeNotifier {
   // ─── Item selection ────────────────────────────────────────────────────
   void selectItem(int index) {
     if (index < 0 || index >= _currentItems.length) return;
+    _prevActiveItemIndex = _activeItemIndex;
     _activeItemIndex = index;
     _showItemDetails = true;
     notifyListeners();
+  }
+
+  void revertSelection() {
+    if (_prevActiveItemIndex != null) {
+      _activeItemIndex = _prevActiveItemIndex;
+      _prevActiveItemIndex = null;
+      notifyListeners();
+    }
   }
 
   void toggleItemDetails() {
