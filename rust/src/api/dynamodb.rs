@@ -1,6 +1,9 @@
 use crate::api::dev_logs::{log_error, log_info};
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_dynamodb::types::AttributeValue;
+use aws_sdk_dynamodb::types::{
+    AttributeDefinition, AttributeValue, BillingMode, GlobalSecondaryIndex, KeySchemaElement,
+    KeyType, Projection, ProjectionType, ProvisionedThroughput, ScalarAttributeType,
+};
 use aws_sdk_dynamodb::Client as DdbClient;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
@@ -157,6 +160,353 @@ pub async fn list_tables(
         ),
     );
     Ok(tables)
+}
+
+/// Create a DynamoDB table with an optional sort key and global secondary indexes.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_table(
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+    table_name: String,
+    pk_name: String,
+    pk_type: String,
+    sk_name: Option<String>,
+    sk_type: Option<String>,
+    billing_mode: String,
+    read_capacity: Option<i64>,
+    write_capacity: Option<i64>,
+    gsis_json: String,
+) -> Result<(), String> {
+    log_info(
+        "dynamodb",
+        format!(
+            "create_table start table='{}' profile='{}'",
+            table_name, profile
+        ),
+    );
+    if table_name.trim().is_empty() || pk_name.trim().is_empty() {
+        return Err("Table name and partition key name are required".to_string());
+    }
+    if !matches!(billing_mode.as_str(), "PROVISIONED" | "PAY_PER_REQUEST") {
+        return Err("Billing mode must be PROVISIONED or PAY_PER_REQUEST".to_string());
+    }
+    if billing_mode == "PROVISIONED"
+        && (read_capacity.unwrap_or(5) < 1 || write_capacity.unwrap_or(5) < 1)
+    {
+        return Err("Provisioned read and write capacity must be at least 1".to_string());
+    }
+    if sk_name
+        .as_deref()
+        .is_some_and(|sk| sk.trim() == pk_name.trim())
+    {
+        return Err("Partition and sort keys must use different attribute names".to_string());
+    }
+
+    let mut attributes = BTreeMap::new();
+    attributes.insert(pk_name.clone(), parse_scalar_attribute_type(&pk_type)?);
+    let mut key_schema = vec![KeySchemaElement::builder()
+        .attribute_name(&pk_name)
+        .key_type(KeyType::Hash)
+        .build()
+        .map_err(|e| e.to_string())?];
+
+    if let Some(sk) = sk_name.as_ref().filter(|name| !name.trim().is_empty()) {
+        let ty = sk_type.as_deref().unwrap_or("S");
+        if let Some(existing) = attributes.get(sk) {
+            if existing.as_str() != ty {
+                return Err(format!(
+                    "Attribute '{sk}' is used with conflicting key types"
+                ));
+            }
+        }
+        attributes.insert(sk.clone(), parse_scalar_attribute_type(ty)?);
+        key_schema.push(
+            KeySchemaElement::builder()
+                .attribute_name(sk)
+                .key_type(KeyType::Range)
+                .build()
+                .map_err(|e| e.to_string())?,
+        );
+    }
+
+    let gsi_specs: Vec<serde_json::Value> =
+        serde_json::from_str(&gsis_json).map_err(|e| format!("Invalid GSI configuration: {e}"))?;
+    if gsi_specs.len() > 20 {
+        return Err("A table can have at most 20 global secondary indexes".to_string());
+    }
+    let mut gsis = Vec::new();
+    let mut index_names = BTreeSet::new();
+    for gsi in gsi_specs {
+        let index_name = gsi["name"].as_str().unwrap_or_default().trim();
+        let index_pk = gsi["pk_name"].as_str().unwrap_or_default().trim();
+        if index_name.is_empty() || index_pk.is_empty() {
+            return Err("Each GSI requires an index name and partition key".to_string());
+        }
+        if !index_names.insert(index_name.to_string()) {
+            return Err(format!(
+                "Duplicate global secondary index name '{index_name}'"
+            ));
+        }
+        for (name, ty) in [
+            (index_pk, gsi["pk_type"].as_str().unwrap_or("S")),
+            (
+                gsi["sk_name"].as_str().unwrap_or_default().trim(),
+                gsi["sk_type"].as_str().unwrap_or("S"),
+            ),
+        ] {
+            if !name.is_empty() {
+                let parsed = parse_scalar_attribute_type(ty)?;
+                if attributes.get(name).is_some_and(|old| old.as_str() != ty) {
+                    return Err(format!(
+                        "Attribute '{name}' is used with conflicting key types"
+                    ));
+                }
+                attributes.insert(name.to_string(), parsed);
+            }
+        }
+        let mut schema = vec![KeySchemaElement::builder()
+            .attribute_name(index_pk)
+            .key_type(KeyType::Hash)
+            .build()
+            .map_err(|e| e.to_string())?];
+        if let Some(index_sk) = gsi["sk_name"]
+            .as_str()
+            .filter(|name| !name.trim().is_empty())
+        {
+            if index_sk.trim() == index_pk {
+                return Err(format!(
+                    "GSI '{index_name}' partition and sort keys must be different"
+                ));
+            }
+            schema.push(
+                KeySchemaElement::builder()
+                    .attribute_name(index_sk)
+                    .key_type(KeyType::Range)
+                    .build()
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut index = GlobalSecondaryIndex::builder()
+            .index_name(index_name)
+            .set_key_schema(Some(schema))
+            .projection(
+                Projection::builder()
+                    .projection_type(ProjectionType::All)
+                    .build(),
+            );
+        if billing_mode == "PROVISIONED" {
+            index = index.provisioned_throughput(
+                ProvisionedThroughput::builder()
+                    .read_capacity_units(read_capacity.unwrap_or(5))
+                    .write_capacity_units(write_capacity.unwrap_or(5))
+                    .build()
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        gsis.push(index.build().map_err(|e| e.to_string())?);
+    }
+
+    let attribute_definitions = attributes
+        .into_iter()
+        .map(|(name, ty)| {
+            AttributeDefinition::builder()
+                .attribute_name(name)
+                .attribute_type(ty)
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
+    let mut request = client
+        .create_table()
+        .table_name(&table_name)
+        .set_attribute_definitions(Some(attribute_definitions))
+        .set_key_schema(Some(key_schema))
+        .billing_mode(match billing_mode.as_str() {
+            "PROVISIONED" => BillingMode::Provisioned,
+            _ => BillingMode::PayPerRequest,
+        })
+        .set_global_secondary_indexes(if gsis.is_empty() { None } else { Some(gsis) });
+
+    if billing_mode == "PROVISIONED" {
+        request = request.provisioned_throughput(
+            ProvisionedThroughput::builder()
+                .read_capacity_units(read_capacity.unwrap_or(5))
+                .write_capacity_units(write_capacity.unwrap_or(5))
+                .build()
+                .map_err(|e| e.to_string())?,
+        );
+    }
+
+    with_timeout(
+        async { request.send().await.map(|_| ()).map_err(|e| e.to_string()) },
+        &profile,
+        &format!("creating table '{table_name}'"),
+        REQUEST_TIMEOUT,
+    )
+    .await?;
+    log_info(
+        "dynamodb",
+        format!("create_table accepted table='{}'", table_name),
+    );
+    Ok(())
+}
+
+fn parse_scalar_attribute_type(value: &str) -> Result<ScalarAttributeType, String> {
+    match value {
+        "S" => Ok(ScalarAttributeType::S),
+        "N" => Ok(ScalarAttributeType::N),
+        "B" => Ok(ScalarAttributeType::B),
+        _ => Err(format!("Unsupported key type '{value}'. Use S, N or B.")),
+    }
+}
+
+pub async fn delete_table(
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+    table_name: String,
+) -> Result<(), String> {
+    log_info(
+        "dynamodb",
+        format!(
+            "delete_table start table='{}' profile='{}'",
+            table_name, profile
+        ),
+    );
+    if table_name.trim().is_empty() {
+        return Err("Table name is required".to_string());
+    }
+    let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
+    with_timeout(
+        async {
+            client
+                .delete_table()
+                .table_name(&table_name)
+                .send()
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        },
+        &profile,
+        &format!("deleting table '{table_name}'"),
+        REQUEST_TIMEOUT,
+    )
+    .await?;
+    log_info(
+        "dynamodb",
+        format!("delete_table accepted table='{}'", table_name),
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod table_operation_tests {
+    use super::*;
+
+    #[test]
+    fn parses_supported_scalar_types() {
+        assert_eq!(
+            parse_scalar_attribute_type("S").unwrap(),
+            ScalarAttributeType::S
+        );
+        assert_eq!(
+            parse_scalar_attribute_type("N").unwrap(),
+            ScalarAttributeType::N
+        );
+        assert_eq!(
+            parse_scalar_attribute_type("B").unwrap(),
+            ScalarAttributeType::B
+        );
+        assert!(parse_scalar_attribute_type("BOOL").is_err());
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_invalid_input_before_aws_access() {
+        let result = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "invalid".to_string(),
+            None,
+            None,
+            "PAY_PER_REQUEST".to_string(),
+            None,
+            None,
+            "[]".to_string(),
+        )
+        .await;
+        assert!(result.unwrap_err().contains("Unsupported key type"));
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_invalid_billing_and_capacity() {
+        let invalid_billing = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "UNKNOWN".to_string(),
+            None,
+            None,
+            "[]".to_string(),
+        )
+        .await;
+        assert!(invalid_billing.unwrap_err().contains("Billing mode"));
+
+        let invalid_capacity = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "PROVISIONED".to_string(),
+            Some(0),
+            Some(5),
+            "[]".to_string(),
+        )
+        .await;
+        assert!(invalid_capacity.unwrap_err().contains("at least 1"));
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_malformed_gsi_before_aws_access() {
+        let result = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "PAY_PER_REQUEST".to_string(),
+            None,
+            None,
+            r#"[{"name":"by_status"}]"#.to_string(),
+        )
+        .await;
+        assert!(result
+            .unwrap_err()
+            .contains("requires an index name and partition key"));
+    }
+
+    #[tokio::test]
+    async fn delete_table_rejects_blank_name_before_aws_access() {
+        let result = delete_table(String::new(), None, None, "  ".to_string()).await;
+        assert!(result.unwrap_err().contains("Table name is required"));
+    }
 }
 
 pub async fn describe_table(

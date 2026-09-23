@@ -4,10 +4,11 @@
 
 | Tool | Recommended version | Install |
 |------|-------------------|---------|
-| Flutter | `3.44.2` | `brew install flutter` or [flutter.dev](https://flutter.dev) |
+| Flutter | `3.47.4` | Pinned with FVM in `.fvmrc` (`fvm install`) |
+| FVM | latest | `brew install fvm` or [fvm.app](https://fvm.app) |
 | Rust | `1.96.0` | `rustup install 1.96.0 && rustup default 1.96.0` |
 | AWS CLI | latest | `brew install awscli` |
-| mise | latest | `brew install mise` (optional — for dev commands) |
+| mise | latest | `brew install mise` (optional — for Rust/Flutter toolchain tasks) |
 
 Ensure the `macos` desktop target is available:
 

@@ -6,7 +6,7 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 
 - **AWS profile discovery** — reads `~/.aws/credentials` and `~/.aws/config`; classifies profiles as `static`, `short_term`, `sso`, `role`, or `credential_source`
 - **AWS CLI–based authentication** — supports `aws login`, `aws sso login`, and `aws configure sso`; detects available capabilities automatically
-- **DynamoDB operations** — list tables, describe schema, scan/query items with filters, pagination
+- **DynamoDB operations** — list/create/delete tables, create/edit/delete items, scan/query with filters and pagination; table creation supports sort keys, GSIs, and on-demand or provisioned billing
 - **Diagnostics panel** — inspect profile paths, file existence, CLI capabilities, and error messages without exposing secrets
 - **Dev Logs panel** — in-app view of Rust-side events (info, warning, error) for debugging
 
@@ -14,10 +14,10 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 
 | Tool        | Recommended version | Notes                             |
 |-------------|---------------------|-----------------------------------|
-| Flutter     | `3.44.2`            | macOS desktop target required     |
+| Flutter     | `3.47.4`            | Pinned with FVM; macOS desktop target required |
 | Rust        | `1.96.0`            | Stable toolchain                  |
 | AWS CLI     | any recent          | Must be in `$PATH`                |
-| Dart SDK    | `^3.12.1`           | Managed by Flutter SDK            |
+| Dart SDK    | `3.13.3`             | Bundled with the pinned Flutter SDK |
 
 ## Quick Start
 
