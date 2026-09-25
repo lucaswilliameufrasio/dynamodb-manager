@@ -69,9 +69,6 @@ jobs:
           - os: ubuntu-22.04
             platform: linux
             arch: x86_64
-          - os: ubuntu-22.04-arm
-            platform: linux
-            arch: arm64
           - os: macos-14
             platform: macos
             arch: arm64

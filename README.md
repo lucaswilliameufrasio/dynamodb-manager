@@ -102,8 +102,8 @@ rust/src/
 ## Desktop distribution
 
 Tagged releases are packaged for macOS (Apple Silicon and Intel) and Linux
-(x86_64 and ARM64). The release workflow publishes a macOS DMG and `.app.zip`
-for each architecture, plus a Linux AppImage for each architecture.
+(x86_64). The release workflow publishes a macOS DMG and `.app.zip` for each
+architecture, plus a Linux AppImage.
 
 To package locally, use `make package-dist` on macOS or Linux. For a release,
 run **Actions → Prepare Release** on `main`, merge the generated version PR, and
