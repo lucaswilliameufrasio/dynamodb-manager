@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -502318541;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1982446844;
 
 // Section: executor
 
@@ -200,6 +200,67 @@ fn wire__crate__api__dev_logs__clear_dev_logs_impl(
         },
     )
 }
+fn wire__crate__api__dynamodb__create_table_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_table",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_profile = <String>::sse_decode(&mut deserializer);
+            let api_region_override = <Option<String>>::sse_decode(&mut deserializer);
+            let api_endpoint_override = <Option<String>>::sse_decode(&mut deserializer);
+            let api_table_name = <String>::sse_decode(&mut deserializer);
+            let api_pk_name = <String>::sse_decode(&mut deserializer);
+            let api_pk_type = <String>::sse_decode(&mut deserializer);
+            let api_sk_name = <Option<String>>::sse_decode(&mut deserializer);
+            let api_sk_type = <Option<String>>::sse_decode(&mut deserializer);
+            let api_billing_mode = <String>::sse_decode(&mut deserializer);
+            let api_read_capacity = <Option<i64>>::sse_decode(&mut deserializer);
+            let api_write_capacity = <Option<i64>>::sse_decode(&mut deserializer);
+            let api_gsis_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::dynamodb::create_table(
+                            api_profile,
+                            api_region_override,
+                            api_endpoint_override,
+                            api_table_name,
+                            api_pk_name,
+                            api_pk_type,
+                            api_sk_name,
+                            api_sk_type,
+                            api_billing_mode,
+                            api_read_capacity,
+                            api_write_capacity,
+                            api_gsis_json,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__dynamodb__delete_item_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -276,6 +337,51 @@ fn wire__crate__api__aws_profiles__delete_profile_impl(
                     let output_ok = crate::api::aws_profiles::delete_profile(api_name)?;
                     Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__api__dynamodb__delete_table_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "delete_table",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_profile = <String>::sse_decode(&mut deserializer);
+            let api_region_override = <Option<String>>::sse_decode(&mut deserializer);
+            let api_endpoint_override = <Option<String>>::sse_decode(&mut deserializer);
+            let api_table_name = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::dynamodb::delete_table(
+                            api_profile,
+                            api_region_override,
+                            api_endpoint_override,
+                            api_table_name,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -1223,48 +1329,50 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         4 => wire__crate__api__dev_logs__clear_dev_logs_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__dynamodb__delete_item_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__aws_profiles__delete_profile_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__dynamodb__describe_table_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__aws_profiles__get_aws_cli_capabilities_impl(
+        5 => wire__crate__api__dynamodb__create_table_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__dynamodb__delete_item_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__aws_profiles__delete_profile_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__dynamodb__delete_table_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__dynamodb__describe_table_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__aws_profiles__get_aws_cli_capabilities_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__aws_profiles__get_aws_diagnostics_impl(
+        11 => wire__crate__api__aws_profiles__get_aws_diagnostics_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => {
+        12 => {
             wire__crate__api__dev_logs__get_recent_dev_logs_impl(port, ptr, rust_vec_len, data_len)
         }
-        12 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__aws_profiles__list_local_aws_profiles_impl(
+        14 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__aws_profiles__list_local_aws_profiles_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__crate__api__dynamodb__list_table_attributes_impl(
+        16 => wire__crate__api__dynamodb__list_table_attributes_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        15 => wire__crate__api__dynamodb__list_tables_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__dynamodb__put_item_impl(port, ptr, rust_vec_len, data_len),
-        17 => {
+        17 => wire__crate__api__dynamodb__list_tables_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__dynamodb__put_item_impl(port, ptr, rust_vec_len, data_len),
+        19 => {
             wire__crate__api__dynamodb__put_item_create_only_impl(port, ptr, rust_vec_len, data_len)
         }
-        18 => {
+        20 => {
             wire__crate__api__dynamodb__put_item_update_only_impl(port, ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__dynamodb__query_items_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__dynamodb__scan_items_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__aws_profiles__sso_login_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__dynamodb__query_items_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__dynamodb__scan_items_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__aws_profiles__sso_login_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1277,7 +1385,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        11 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

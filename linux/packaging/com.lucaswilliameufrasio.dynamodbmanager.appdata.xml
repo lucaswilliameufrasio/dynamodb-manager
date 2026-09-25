@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.lucaswilliameufrasio.dynamodbmanager</id>
+  <name>DynamoDB Manager</name>
+  <summary>Desktop browser and manager for Amazon DynamoDB</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>A desktop application for browsing and managing DynamoDB tables.</p>
+    <p>Connect with local AWS profiles, inspect table schemas, and manage items.</p>
+  </description>
+  <url type="homepage">https://github.com/lucaswilliameufrasio/dynamodb-manager</url>
+  <launchable type="desktop-id">dynamodb_manager.desktop</launchable>
+</component>

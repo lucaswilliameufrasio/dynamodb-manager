@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/dynamo_item.dart';
+import '../models/dynamo_item_validation.dart';
+import '../widgets/dynamo_items_list.dart';
 import '../rust/api/aws_profiles.dart' as profiles;
 import '../rust/api/dynamodb.dart' as dynamodb;
 import '../controllers/workspace_controller.dart';
@@ -1055,6 +1059,602 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════
 
+class _GsiFields {
+  final name = TextEditingController();
+  final pkName = TextEditingController();
+  final skName = TextEditingController();
+  String pkType = 'S';
+  String skType = 'S';
+
+  void dispose() {
+    name.dispose();
+    pkName.dispose();
+    skName.dispose();
+  }
+}
+
+class _CreateTableDialog extends StatefulWidget {
+  final WorkspaceController controller;
+  const _CreateTableDialog({required this.controller});
+
+  @override
+  State<_CreateTableDialog> createState() => _CreateTableDialogState();
+}
+
+class _CreateTableDialogState extends State<_CreateTableDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _tableName = TextEditingController();
+  final _pkName = TextEditingController();
+  final _skName = TextEditingController();
+  final _readCapacity = TextEditingController(text: '5');
+  final _writeCapacity = TextEditingController(text: '5');
+  final List<_GsiFields> _gsis = [];
+  String _pkType = 'S';
+  String _skType = 'S';
+  bool _hasSortKey = false;
+  bool _provisioned = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _tableName.dispose();
+    _pkName.dispose();
+    _skName.dispose();
+    _readCapacity.dispose();
+    _writeCapacity.dispose();
+    for (final gsi in _gsis) {
+      gsi.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.createTable(
+        tableName: _tableName.text.trim(),
+        partitionKey: _pkName.text.trim(),
+        partitionKeyType: _pkType,
+        sortKey: _hasSortKey ? _skName.text.trim() : null,
+        sortKeyType: _hasSortKey ? _skType : null,
+        provisioned: _provisioned,
+        readCapacity: int.tryParse(_readCapacity.text) ?? 5,
+        writeCapacity: int.tryParse(_writeCapacity.text) ?? 5,
+        gsisJson: jsonEncode(
+          _gsis
+              .map(
+                (gsi) => {
+                  'name': gsi.name.text.trim(),
+                  'pk_name': gsi.pkName.text.trim(),
+                  'pk_type': gsi.pkType,
+                  'sk_name': gsi.skName.text.trim(),
+                  'sk_type': gsi.skType,
+                },
+              )
+              .toList(),
+        ),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _saving = false;
+      });
+    }
+  }
+
+  Widget _keyTypeDropdown({
+    required String value,
+    required ValueChanged<String?> onChanged,
+  }) => DropdownButtonFormField<String>(
+    initialValue: value,
+    decoration: const InputDecoration(labelText: 'Type'),
+    items: const [
+      DropdownMenuItem(value: 'S', child: Text('String')),
+      DropdownMenuItem(value: 'N', child: Text('Number')),
+      DropdownMenuItem(value: 'B', child: Text('Binary')),
+    ],
+    onChanged: onChanged,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create DynamoDB table'),
+      content: SizedBox(
+        width: 580,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _tableName,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Table name'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Table name is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Partition key',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _pkName,
+                        decoration: const InputDecoration(
+                          labelText: 'Attribute name',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Partition key is required'
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _keyTypeDropdown(
+                        value: _pkType,
+                        onChanged: (value) =>
+                            setState(() => _pkType = value ?? 'S'),
+                      ),
+                    ),
+                  ],
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Add sort key'),
+                  value: _hasSortKey,
+                  onChanged: (value) =>
+                      setState(() => _hasSortKey = value ?? false),
+                ),
+                if (_hasSortKey)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _skName,
+                          decoration: const InputDecoration(
+                            labelText: 'Sort key name',
+                          ),
+                          validator: (value) =>
+                              _hasSortKey &&
+                                  (value == null || value.trim().isEmpty)
+                              ? 'Sort key is required'
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _keyTypeDropdown(
+                          value: _skType,
+                          onChanged: (value) =>
+                              setState(() => _skType = value ?? 'S'),
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<bool>(
+                  initialValue: _provisioned,
+                  decoration: const InputDecoration(labelText: 'Billing mode'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: false,
+                      child: Text('On-demand (PAY_PER_REQUEST)'),
+                    ),
+                    DropdownMenuItem(
+                      value: true,
+                      child: Text('Provisioned capacity'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _provisioned = value ?? false),
+                ),
+                if (_provisioned)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _readCapacity,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Read units',
+                          ),
+                          validator: (value) =>
+                              _provisioned &&
+                                  (int.tryParse(value ?? '') ?? 0) < 1
+                              ? 'Must be at least 1'
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _writeCapacity,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Write units',
+                          ),
+                          validator: (value) =>
+                              _provisioned &&
+                                  (int.tryParse(value ?? '') ?? 0) < 1
+                              ? 'Must be at least 1'
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Global secondary indexes',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _gsis.add(_GsiFields())),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add GSI'),
+                    ),
+                  ],
+                ),
+                for (var i = 0; i < _gsis.length; i++)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _gsis[i].name,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Index name',
+                                  ),
+                                  validator: (value) =>
+                                      value == null || value.trim().isEmpty
+                                      ? 'Index name is required'
+                                      : null,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove index',
+                                onPressed: () => setState(() {
+                                  _gsis.removeAt(i).dispose();
+                                }),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _gsis[i].pkName,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Index partition key',
+                                  ),
+                                  validator: (value) =>
+                                      value == null || value.trim().isEmpty
+                                      ? 'Index partition key is required'
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _keyTypeDropdown(
+                                  value: _gsis[i].pkType,
+                                  onChanged: (value) => setState(
+                                    () => _gsis[i].pkType = value ?? 'S',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _gsis[i].skName,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Index sort key (optional)',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _keyTypeDropdown(
+                                  value: _gsis[i].skType,
+                                  onChanged: (value) => setState(
+                                    () => _gsis[i].skType = value ?? 'S',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Create table'),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _confirmDeleteTable(
+  BuildContext context,
+  WorkspaceController controller,
+  String tableName,
+) async {
+  final nameController = TextEditingController();
+  final typedCorrectName = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: const Text('Delete table?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This permanently deletes "$tableName" and every item in it.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Type the table name to continue',
+              ),
+              onChanged: (_) => setDialogState(() {}),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: nameController.text == tableName
+                ? () => Navigator.pop(dialogContext, true)
+                : null,
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    ),
+  );
+  nameController.dispose();
+  if (typedCorrectName != true || !context.mounted) return;
+
+  final finalConfirm = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirm permanent deletion'),
+      content: Text(
+        'Delete "$tableName" and all its data now? This cannot be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Delete table'),
+        ),
+      ],
+    ),
+  );
+  if (finalConfirm != true || !context.mounted) return;
+  try {
+    await controller.deleteTable(tableName);
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete table failed: $e')));
+    }
+  }
+}
+
+Future<void> _createItem(
+  BuildContext context,
+  WorkspaceController controller,
+) async {
+  final tableName = controller.activeTable;
+  if (tableName == null) return;
+  late final dynamodb.TableSummary summary;
+  try {
+    summary = await dynamodb.describeTable(
+      profile: controller.profile,
+      regionOverride: controller.regionOverride,
+      endpointOverride: controller.endpointOverride,
+      tableName: tableName,
+    );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not load table keys: $e')));
+    }
+    return;
+  }
+  if (!context.mounted) return;
+
+  final jsonController = TextEditingController(text: '{\n  \n}');
+  String? error;
+  bool saving = false;
+  final created = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: Text('Create item in $tableName'),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Required keys: ${summary.pk}${summary.sk == null ? '' : ', ${summary.sk}'}',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: jsonController,
+                minLines: 10,
+                maxLines: 18,
+                autofocus: true,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                decoration: const InputDecoration(
+                  labelText: 'Item JSON',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: const TextStyle(color: Colors.redAccent)),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: saving
+                ? null
+                : () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: saving
+                ? null
+                : () async {
+                    setDialogState(() {
+                      saving = true;
+                      error = null;
+                    });
+                    try {
+                      final decoded = parseNewDynamoItem(
+                        jsonController.text,
+                        partitionKey: summary.pk,
+                        sortKey: summary.sk,
+                      );
+                      final inserted = await controller.createItem(
+                        jsonEncode(decoded),
+                        tableName: tableName,
+                        pkName: summary.pk!,
+                        skName: summary.sk,
+                      );
+                      if (!inserted && dialogContext.mounted) {
+                        final replace = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (confirmContext) => AlertDialog(
+                            title: const Text('Item already exists'),
+                            content: const Text(
+                              'An item with this key already exists. Replace its contents?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(confirmContext, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.pop(confirmContext, true),
+                                child: const Text('Replace item'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (replace == true) {
+                          await controller.replaceItem(
+                            jsonEncode(decoded),
+                            tableName: tableName,
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext, true);
+                          }
+                          return;
+                        }
+                        setDialogState(() => saving = false);
+                        return;
+                      }
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext, true);
+                      }
+                    } catch (e) {
+                      setDialogState(() {
+                        error = e.toString().replaceFirst(
+                          'FormatException: ',
+                          '',
+                        );
+                        saving = false;
+                      });
+                    }
+                  },
+            child: saving
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Create item'),
+          ),
+        ],
+      ),
+    ),
+  );
+  jsonController.dispose();
+  if (created == true && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Item created')));
+  }
+}
+
 class _SidebarPane extends StatelessWidget {
   final WorkspaceController controller;
   const _SidebarPane({required this.controller});
@@ -1078,6 +1678,14 @@ class _SidebarPane extends StatelessWidget {
                     fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                tooltip: 'Create table',
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => _CreateTableDialog(controller: controller),
                 ),
               ),
               IconButton(
@@ -1173,6 +1781,12 @@ class _SidebarPane extends StatelessWidget {
                     table,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 13),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 17),
+                    tooltip: 'Delete table',
+                    onPressed: () =>
+                        _confirmDeleteTable(context, controller, table),
                   ),
                   onTap: () => controller.openTable(table),
                 );
@@ -1298,6 +1912,13 @@ class _TableDashboard extends StatelessWidget {
                 child: Row(
                   children: [
                     IconButton(
+                      icon: const Icon(Icons.add_box_outlined, size: 18),
+                      tooltip: 'Create item',
+                      onPressed: c.itemsLoading
+                          ? null
+                          : () => _createItem(context, c),
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.analytics, size: 18),
                       tooltip: 'Table metrics',
                       onPressed: () => showDialog(
@@ -1356,33 +1977,12 @@ class _TableDashboard extends StatelessWidget {
   }
 
   Widget _buildItemsList(WorkspaceController c) {
-    if (c.itemsLoading && c.currentItems.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (c.itemsError != null && c.currentItems.isEmpty) {
-      return Center(
-        child: Text(
-          c.itemsError!,
-          style: const TextStyle(color: Colors.redAccent),
-        ),
-      );
-    }
-    return ListView.separated(
-      itemCount: c.currentItems.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final item = c.currentItems[index];
-        final isSelected = item == c.activeItem;
-        return ListTile(
-          selected: isSelected,
-          selectedTileColor: Colors.blue.withValues(alpha: 0.2),
-          title: Text(
-            item.id,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          ),
-          onTap: () => c.selectItem(index),
-        );
-      },
+    return DynamoItemsList(
+      itemsProvider: () => c.currentItems,
+      loading: c.itemsLoading,
+      error: c.itemsError,
+      selectedItemProvider: () => c.activeItem,
+      onSelect: c.selectItem,
     );
   }
 }
@@ -1461,13 +2061,17 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, _SwitchAction.discard),
-              child: const Text('Discard & Switch',
-                  style: TextStyle(color: Colors.redAccent)),
+              child: const Text(
+                'Discard & Switch',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, _SwitchAction.saveAndSwitch),
-              child: const Text('Save & Switch',
-                  style: TextStyle(color: Colors.greenAccent)),
+              child: const Text(
+                'Save & Switch',
+                style: TextStyle(color: Colors.greenAccent),
+              ),
             ),
           ],
         ),
@@ -1484,9 +2088,9 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
           await widget.controller.saveItem(_textController.text);
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Save failed: $e')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
           }
           _saving = false;
           widget.controller.revertSelection();
@@ -1514,9 +2118,9 @@ class _ItemDetailsPanelState extends State<_ItemDetailsPanel> {
       _dirty = false;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
       }
     }
     setState(() => _saving = false);

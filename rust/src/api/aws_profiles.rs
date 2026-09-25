@@ -292,6 +292,7 @@ pub async fn aws_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws login`: {}", e))?;
 
     if status.success() {
+        crate::api::dynamodb::invalidate_profile_client_cache(&profile_name).await;
         log_info(
             "aws_profiles",
             format!("aws login success profile='{}'", profile_name),
@@ -334,6 +335,7 @@ pub async fn sso_login(profile_name: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to run `aws sso login`: {}", e))?;
 
     if status.success() {
+        crate::api::dynamodb::invalidate_profile_client_cache(&profile_name).await;
         log_info(
             "aws_profiles",
             format!("sso login success profile='{}'", profile_name),

@@ -6,7 +6,7 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 
 - **AWS profile discovery** — reads `~/.aws/credentials` and `~/.aws/config`; classifies profiles as `static`, `short_term`, `sso`, `role`, or `credential_source`
 - **AWS CLI–based authentication** — supports `aws login`, `aws sso login`, and `aws configure sso`; detects available capabilities automatically
-- **DynamoDB operations** — list tables, describe schema, scan/query items with filters, pagination
+- **DynamoDB operations** — list/create/delete tables, create/edit/delete items, scan/query with filters and pagination; table creation supports sort keys, GSIs, and on-demand or provisioned billing
 - **Diagnostics panel** — inspect profile paths, file existence, CLI capabilities, and error messages without exposing secrets
 - **Dev Logs panel** — in-app view of Rust-side events (info, warning, error) for debugging
 
@@ -14,10 +14,10 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 
 | Tool        | Recommended version | Notes                             |
 |-------------|---------------------|-----------------------------------|
-| Flutter     | `3.44.2`            | macOS desktop target required     |
+| Flutter     | `3.47.4`            | Pinned with FVM; macOS/Linux desktop |
 | Rust        | `1.96.0`            | Stable toolchain                  |
 | AWS CLI     | any recent          | Must be in `$PATH`                |
-| Dart SDK    | `^3.12.1`           | Managed by Flutter SDK            |
+| Dart SDK    | `3.13.3`             | Bundled with the pinned Flutter SDK |
 
 ## Quick Start
 
@@ -96,3 +96,16 @@ rust/src/
 - [Development](docs/development.md) — Workflow, codegen, key modules
 - [Troubleshooting](docs/troubleshooting.md) — Common issues and fixes
 - [Security](docs/security.md) — What the app logs and never exposes
+- [Performance](docs/performance.md) — Reproducible local baselines for Flutter and Rust
+- [Distribution](docs/distribution.md) — Desktop release workflow and packages
+
+## Desktop distribution
+
+Tagged releases are packaged for macOS (Apple Silicon and Intel) and Linux
+(x86_64). The release workflow publishes a macOS DMG and `.app.zip` for each
+architecture, plus a Linux AppImage.
+
+To package locally, use `make package-dist` on macOS or Linux. For a release,
+run **Actions → Prepare Release** on `main`, merge the generated version PR, and
+push its matching `vX.Y.Z` tag. Downloads and macOS signing details are in
+[Distribution](docs/distribution.md) and [macOS signing](docs/macos-signing.md).

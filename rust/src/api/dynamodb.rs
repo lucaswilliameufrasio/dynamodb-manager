@@ -1,9 +1,14 @@
 use crate::api::dev_logs::{log_error, log_info};
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_dynamodb::types::AttributeValue;
+use aws_sdk_dynamodb::types::{
+    AttributeDefinition, AttributeValue, BillingMode, GlobalSecondaryIndex, KeySchemaElement,
+    KeyType, Projection, ProjectionType, ProvisionedThroughput, ScalarAttributeType,
+};
 use aws_sdk_dynamodb::Client as DdbClient;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, OnceCell};
 
 // ─── Data structures exposed to Flutter via FRB ────────────────────────────
 
@@ -51,6 +56,9 @@ struct FilterExpressionParts {
 
 const CONFIG_TIMEOUT: Duration = Duration::from_secs(8);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+// Periodically reload shared AWS profile files while reusing client connections.
+const CLIENT_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const CLIENT_CACHE_MAX_ENTRIES: usize = 16;
 
 /// Run a future with a timeout and produce a user-facing error if it elapses.
 async fn with_timeout<T, F: std::future::Future<Output = Result<T, String>>>(
@@ -72,7 +80,230 @@ async fn with_timeout<T, F: std::future::Future<Output = Result<T, String>>>(
 
 // ─── Client builder ────────────────────────────────────────────────────────
 
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct ClientCacheKey {
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+}
+
+struct ClientCacheEntry<T> {
+    expires_at: Instant,
+    last_used: Instant,
+    cell: Arc<OnceCell<T>>,
+}
+
+struct ClientCache<T> {
+    entries: HashMap<ClientCacheKey, ClientCacheEntry<T>>,
+}
+
+impl<T> Default for ClientCache<T> {
+    fn default() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+}
+
+impl<T> ClientCache<T> {
+    fn cell_for(&mut self, key: ClientCacheKey, now: Instant) -> Arc<OnceCell<T>> {
+        self.entries.retain(|_, entry| entry.expires_at > now);
+
+        if let Some(entry) = self.entries.get_mut(&key) {
+            entry.last_used = now;
+            return Arc::clone(&entry.cell);
+        }
+
+        if self.entries.len() >= CLIENT_CACHE_MAX_ENTRIES {
+            if let Some(least_recently_used) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            {
+                self.entries.remove(&least_recently_used);
+            }
+        }
+
+        let cell = Arc::new(OnceCell::new());
+        self.entries.insert(
+            key,
+            ClientCacheEntry {
+                expires_at: now + CLIENT_CACHE_TTL,
+                last_used: now,
+                cell: Arc::clone(&cell),
+            },
+        );
+        cell
+    }
+
+    fn invalidate_profile(&mut self, profile: &str) {
+        self.entries.retain(|key, _| key.profile != profile);
+    }
+}
+
+fn ddb_client_cache() -> &'static Mutex<ClientCache<DdbClient>> {
+    static CACHE: OnceLock<Mutex<ClientCache<DdbClient>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(ClientCache::default()))
+}
+
+async fn initialize_cached<T, E, F, Fut>(cell: &OnceCell<T>, initialize: F) -> Result<T, E>
+where
+    T: Clone,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+{
+    Ok(cell.get_or_try_init(initialize).await?.clone())
+}
+
+/// Invalidate cached clients after an explicit credential login for this profile.
+pub(crate) async fn invalidate_profile_client_cache(profile: &str) {
+    ddb_client_cache().lock().await.invalidate_profile(profile);
+}
+
+#[cfg(test)]
+mod client_cache_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn key(profile: &str, region: Option<&str>, endpoint: Option<&str>) -> ClientCacheKey {
+        ClientCacheKey {
+            profile: profile.to_string(),
+            region_override: region.map(str::to_string),
+            endpoint_override: endpoint.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn client_cache_separates_profile_region_and_endpoint() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        let base = cache.cell_for(key("dev", Some("us-east-1"), None), now);
+
+        let same = cache.cell_for(key("dev", Some("us-east-1"), None), now);
+        let other_profile = cache.cell_for(key("prod", Some("us-east-1"), None), now);
+        let other_region = cache.cell_for(key("dev", Some("us-west-2"), None), now);
+        let other_endpoint =
+            cache.cell_for(key("dev", Some("us-east-1"), Some("http://localhost")), now);
+
+        assert!(Arc::ptr_eq(&base, &same));
+        assert!(!Arc::ptr_eq(&base, &other_profile));
+        assert!(!Arc::ptr_eq(&base, &other_region));
+        assert!(!Arc::ptr_eq(&base, &other_endpoint));
+    }
+
+    #[test]
+    fn expired_clients_are_rebuilt_and_profile_invalidation_is_scoped() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        let dev_key = key("dev", Some("us-east-1"), None);
+        let prod_key = key("prod", Some("us-east-1"), None);
+        let dev = cache.cell_for(dev_key.clone(), now);
+        let prod = cache.cell_for(prod_key, now);
+
+        cache.invalidate_profile("dev");
+        let dev_after_invalidation = cache.cell_for(dev_key.clone(), now);
+        let prod_after_invalidation = cache.cell_for(key("prod", Some("us-east-1"), None), now);
+        assert!(!Arc::ptr_eq(&dev, &dev_after_invalidation));
+        assert!(Arc::ptr_eq(&prod, &prod_after_invalidation));
+
+        let dev_after_expiration =
+            cache.cell_for(dev_key, now + CLIENT_CACHE_TTL + Duration::from_secs(1));
+        assert!(!Arc::ptr_eq(&dev_after_invalidation, &dev_after_expiration));
+    }
+
+    #[test]
+    fn client_cache_evicts_least_recently_used_entry_at_capacity() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        cache.cell_for(key("profile-0", None, None), now);
+        let oldest_key = key("profile-1", None, None);
+        let oldest = cache.cell_for(oldest_key.clone(), now + Duration::from_secs(1));
+
+        for index in 1..CLIENT_CACHE_MAX_ENTRIES {
+            cache.cell_for(
+                key(&format!("profile-{index}"), None, None),
+                now + Duration::from_secs(index as u64),
+            );
+        }
+        let recent = cache.cell_for(
+            key("profile-0", None, None),
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64),
+        );
+        assert!(cache.entries.contains_key(&key("profile-0", None, None)));
+        assert!(!Arc::ptr_eq(&oldest, &recent));
+
+        cache.cell_for(
+            key("profile-overflow", None, None),
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64 + 1),
+        );
+        assert_eq!(cache.entries.len(), CLIENT_CACHE_MAX_ENTRIES);
+        let rebuilt_oldest = cache.cell_for(
+            oldest_key,
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64 + 2),
+        );
+        assert!(!Arc::ptr_eq(&oldest, &rebuilt_oldest));
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_share_one_client_initialization() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<usize>::default();
+        let cell = cache.cell_for(key("shared", None, None), now);
+        let initialized = Arc::new(AtomicUsize::new(0));
+        let tasks = (0..16)
+            .map(|_| {
+                let cell = Arc::clone(&cell);
+                let initialized = Arc::clone(&initialized);
+                tokio::spawn(async move {
+                    initialize_cached(&cell, || async move {
+                        tokio::task::yield_now().await;
+                        initialized.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, ()>(42)
+                    })
+                    .await
+                    .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for task in tasks {
+            assert_eq!(task.await.unwrap(), 42);
+        }
+        assert_eq!(initialized.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn failed_client_initialization_does_not_poison_the_cache_cell() {
+        let cell = OnceCell::<usize>::new();
+        let failed =
+            initialize_cached(&cell, || async { Err::<usize, _>("temporary failure") }).await;
+        assert_eq!(failed, Err("temporary failure"));
+
+        let recovered = initialize_cached(&cell, || async { Ok::<usize, ()>(42) }).await;
+        assert_eq!(recovered, Ok(42));
+    }
+}
+
 async fn build_ddb_client(
+    profile: &str,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+) -> Result<DdbClient, String> {
+    let key = ClientCacheKey {
+        profile: profile.to_string(),
+        region_override: region_override.clone(),
+        endpoint_override: endpoint_override.clone(),
+    };
+    let now = Instant::now();
+    let cell = ddb_client_cache().lock().await.cell_for(key, now);
+    initialize_cached(&cell, || async {
+        build_ddb_client_uncached(profile, region_override, endpoint_override).await
+    })
+    .await
+}
+
+async fn build_ddb_client_uncached(
     profile: &str,
     region_override: Option<String>,
     endpoint_override: Option<String>,
@@ -157,6 +388,622 @@ pub async fn list_tables(
         ),
     );
     Ok(tables)
+}
+
+/// Create a DynamoDB table with an optional sort key and global secondary indexes.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_table(
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+    table_name: String,
+    pk_name: String,
+    pk_type: String,
+    sk_name: Option<String>,
+    sk_type: Option<String>,
+    billing_mode: String,
+    read_capacity: Option<i64>,
+    write_capacity: Option<i64>,
+    gsis_json: String,
+) -> Result<(), String> {
+    log_info(
+        "dynamodb",
+        format!(
+            "create_table start table='{}' profile='{}'",
+            table_name, profile
+        ),
+    );
+    if table_name.trim().is_empty() || pk_name.trim().is_empty() {
+        return Err("Table name and partition key name are required".to_string());
+    }
+    if !matches!(billing_mode.as_str(), "PROVISIONED" | "PAY_PER_REQUEST") {
+        return Err("Billing mode must be PROVISIONED or PAY_PER_REQUEST".to_string());
+    }
+    if billing_mode == "PROVISIONED"
+        && (read_capacity.unwrap_or(5) < 1 || write_capacity.unwrap_or(5) < 1)
+    {
+        return Err("Provisioned read and write capacity must be at least 1".to_string());
+    }
+    if sk_name
+        .as_deref()
+        .is_some_and(|sk| sk.trim() == pk_name.trim())
+    {
+        return Err("Partition and sort keys must use different attribute names".to_string());
+    }
+
+    let mut attributes = BTreeMap::new();
+    attributes.insert(pk_name.clone(), parse_scalar_attribute_type(&pk_type)?);
+    let mut key_schema = vec![KeySchemaElement::builder()
+        .attribute_name(&pk_name)
+        .key_type(KeyType::Hash)
+        .build()
+        .map_err(|e| e.to_string())?];
+
+    if let Some(sk) = sk_name.as_ref().filter(|name| !name.trim().is_empty()) {
+        let ty = sk_type.as_deref().unwrap_or("S");
+        if let Some(existing) = attributes.get(sk) {
+            if existing.as_str() != ty {
+                return Err(format!(
+                    "Attribute '{sk}' is used with conflicting key types"
+                ));
+            }
+        }
+        attributes.insert(sk.clone(), parse_scalar_attribute_type(ty)?);
+        key_schema.push(
+            KeySchemaElement::builder()
+                .attribute_name(sk)
+                .key_type(KeyType::Range)
+                .build()
+                .map_err(|e| e.to_string())?,
+        );
+    }
+
+    let gsi_specs: Vec<serde_json::Value> =
+        serde_json::from_str(&gsis_json).map_err(|e| format!("Invalid GSI configuration: {e}"))?;
+    if gsi_specs.len() > 20 {
+        return Err("A table can have at most 20 global secondary indexes".to_string());
+    }
+    let mut gsis = Vec::new();
+    let mut index_names = BTreeSet::new();
+    for gsi in gsi_specs {
+        let index_name = gsi["name"].as_str().unwrap_or_default().trim();
+        let index_pk = gsi["pk_name"].as_str().unwrap_or_default().trim();
+        if index_name.is_empty() || index_pk.is_empty() {
+            return Err("Each GSI requires an index name and partition key".to_string());
+        }
+        if !index_names.insert(index_name.to_string()) {
+            return Err(format!(
+                "Duplicate global secondary index name '{index_name}'"
+            ));
+        }
+        for (name, ty) in [
+            (index_pk, gsi["pk_type"].as_str().unwrap_or("S")),
+            (
+                gsi["sk_name"].as_str().unwrap_or_default().trim(),
+                gsi["sk_type"].as_str().unwrap_or("S"),
+            ),
+        ] {
+            if !name.is_empty() {
+                let parsed = parse_scalar_attribute_type(ty)?;
+                if attributes.get(name).is_some_and(|old| old.as_str() != ty) {
+                    return Err(format!(
+                        "Attribute '{name}' is used with conflicting key types"
+                    ));
+                }
+                attributes.insert(name.to_string(), parsed);
+            }
+        }
+        let mut schema = vec![KeySchemaElement::builder()
+            .attribute_name(index_pk)
+            .key_type(KeyType::Hash)
+            .build()
+            .map_err(|e| e.to_string())?];
+        if let Some(index_sk) = gsi["sk_name"]
+            .as_str()
+            .filter(|name| !name.trim().is_empty())
+        {
+            if index_sk.trim() == index_pk {
+                return Err(format!(
+                    "GSI '{index_name}' partition and sort keys must be different"
+                ));
+            }
+            schema.push(
+                KeySchemaElement::builder()
+                    .attribute_name(index_sk)
+                    .key_type(KeyType::Range)
+                    .build()
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut index = GlobalSecondaryIndex::builder()
+            .index_name(index_name)
+            .set_key_schema(Some(schema))
+            .projection(
+                Projection::builder()
+                    .projection_type(ProjectionType::All)
+                    .build(),
+            );
+        if billing_mode == "PROVISIONED" {
+            index = index.provisioned_throughput(
+                ProvisionedThroughput::builder()
+                    .read_capacity_units(read_capacity.unwrap_or(5))
+                    .write_capacity_units(write_capacity.unwrap_or(5))
+                    .build()
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        gsis.push(index.build().map_err(|e| e.to_string())?);
+    }
+
+    let attribute_definitions = attributes
+        .into_iter()
+        .map(|(name, ty)| {
+            AttributeDefinition::builder()
+                .attribute_name(name)
+                .attribute_type(ty)
+                .build()
+                .map_err(|e| e.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
+    let mut request = client
+        .create_table()
+        .table_name(&table_name)
+        .set_attribute_definitions(Some(attribute_definitions))
+        .set_key_schema(Some(key_schema))
+        .billing_mode(match billing_mode.as_str() {
+            "PROVISIONED" => BillingMode::Provisioned,
+            _ => BillingMode::PayPerRequest,
+        })
+        .set_global_secondary_indexes(if gsis.is_empty() { None } else { Some(gsis) });
+
+    if billing_mode == "PROVISIONED" {
+        request = request.provisioned_throughput(
+            ProvisionedThroughput::builder()
+                .read_capacity_units(read_capacity.unwrap_or(5))
+                .write_capacity_units(write_capacity.unwrap_or(5))
+                .build()
+                .map_err(|e| e.to_string())?,
+        );
+    }
+
+    with_timeout(
+        async { request.send().await.map(|_| ()).map_err(|e| e.to_string()) },
+        &profile,
+        &format!("creating table '{table_name}'"),
+        REQUEST_TIMEOUT,
+    )
+    .await?;
+    log_info(
+        "dynamodb",
+        format!("create_table accepted table='{}'", table_name),
+    );
+    Ok(())
+}
+
+fn parse_scalar_attribute_type(value: &str) -> Result<ScalarAttributeType, String> {
+    match value {
+        "S" => Ok(ScalarAttributeType::S),
+        "N" => Ok(ScalarAttributeType::N),
+        "B" => Ok(ScalarAttributeType::B),
+        _ => Err(format!("Unsupported key type '{value}'. Use S, N or B.")),
+    }
+}
+
+pub async fn delete_table(
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+    table_name: String,
+) -> Result<(), String> {
+    log_info(
+        "dynamodb",
+        format!(
+            "delete_table start table='{}' profile='{}'",
+            table_name, profile
+        ),
+    );
+    if table_name.trim().is_empty() {
+        return Err("Table name is required".to_string());
+    }
+    let client = build_ddb_client(&profile, region_override, endpoint_override).await?;
+    with_timeout(
+        async {
+            client
+                .delete_table()
+                .table_name(&table_name)
+                .send()
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        },
+        &profile,
+        &format!("deleting table '{table_name}'"),
+        REQUEST_TIMEOUT,
+    )
+    .await?;
+    log_info(
+        "dynamodb",
+        format!("delete_table accepted table='{}'", table_name),
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod table_operation_tests {
+    use super::*;
+
+    #[test]
+    fn parses_supported_scalar_types() {
+        assert_eq!(
+            parse_scalar_attribute_type("S").unwrap(),
+            ScalarAttributeType::S
+        );
+        assert_eq!(
+            parse_scalar_attribute_type("N").unwrap(),
+            ScalarAttributeType::N
+        );
+        assert_eq!(
+            parse_scalar_attribute_type("B").unwrap(),
+            ScalarAttributeType::B
+        );
+        assert!(parse_scalar_attribute_type("BOOL").is_err());
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_invalid_input_before_aws_access() {
+        let result = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "invalid".to_string(),
+            None,
+            None,
+            "PAY_PER_REQUEST".to_string(),
+            None,
+            None,
+            "[]".to_string(),
+        )
+        .await;
+        assert!(result.unwrap_err().contains("Unsupported key type"));
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_invalid_billing_and_capacity() {
+        let invalid_billing = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "UNKNOWN".to_string(),
+            None,
+            None,
+            "[]".to_string(),
+        )
+        .await;
+        assert!(invalid_billing.unwrap_err().contains("Billing mode"));
+
+        let invalid_capacity = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "PROVISIONED".to_string(),
+            Some(0),
+            Some(5),
+            "[]".to_string(),
+        )
+        .await;
+        assert!(invalid_capacity.unwrap_err().contains("at least 1"));
+    }
+
+    #[tokio::test]
+    async fn create_table_rejects_malformed_gsi_before_aws_access() {
+        let result = create_table(
+            String::new(),
+            None,
+            None,
+            "table".to_string(),
+            "pk".to_string(),
+            "S".to_string(),
+            None,
+            None,
+            "PAY_PER_REQUEST".to_string(),
+            None,
+            None,
+            r#"[{"name":"by_status"}]"#.to_string(),
+        )
+        .await;
+        assert!(result
+            .unwrap_err()
+            .contains("requires an index name and partition key"));
+    }
+
+    #[tokio::test]
+    async fn delete_table_rejects_blank_name_before_aws_access() {
+        let result = delete_table(String::new(), None, None, "  ".to_string()).await;
+        assert!(result.unwrap_err().contains("Table name is required"));
+    }
+}
+
+#[cfg(test)]
+mod performance_tests {
+    use super::*;
+    use aws_sdk_dynamodb::types::{PutRequest, WriteRequest};
+    use std::hint::black_box;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    const PAGE_SIZE: i32 = 50;
+    const SAMPLE_COUNT: usize = 40;
+
+    #[tokio::test]
+    #[ignore = "run via make perf-dynamodb-local; requires disposable DynamoDB Local"]
+    async fn benchmark_scan_page_pipeline_against_local_dynamodb() {
+        let endpoint = std::env::var("DDB_PERF_ENDPOINT")
+            .unwrap_or_else(|_| "http://127.0.0.1:18000".to_string());
+        let profile = "default".to_string();
+        let region = Some("us-east-1".to_string());
+        let table_name = format!(
+            "dynamodb_manager_perf_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        );
+
+        let client = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+            .await
+            .expect("build local benchmark client");
+        let key_attribute = AttributeDefinition::builder()
+            .attribute_name("pk")
+            .attribute_type(ScalarAttributeType::S)
+            .build()
+            .unwrap();
+        let partition_key = KeySchemaElement::builder()
+            .attribute_name("pk")
+            .key_type(KeyType::Hash)
+            .build()
+            .unwrap();
+        client
+            .create_table()
+            .table_name(&table_name)
+            .attribute_definitions(key_attribute)
+            .key_schema(partition_key)
+            .billing_mode(BillingMode::PayPerRequest)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("create local benchmark table: {error:?}"));
+
+        let mut active = false;
+        for _ in 0..100 {
+            if let Ok(description) = client.describe_table().table_name(&table_name).send().await {
+                if description
+                    .table
+                    .and_then(|table| {
+                        table
+                            .table_status()
+                            .map(|status| status.as_str().to_string())
+                    })
+                    .as_deref()
+                    == Some("ACTIVE")
+                {
+                    active = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(active, "local benchmark table did not become ACTIVE");
+
+        for batch_start in (0..PAGE_SIZE).step_by(25) {
+            let requests = (batch_start..(batch_start + 25).min(PAGE_SIZE))
+                .map(|index| {
+                    let item = HashMap::from([
+                        (
+                            "pk".to_string(),
+                            AttributeValue::S(format!("item-{index:03}")),
+                        ),
+                        (
+                            "status".to_string(),
+                            AttributeValue::S(if index % 2 == 0 {
+                                "complete".to_string()
+                            } else {
+                                "pending".to_string()
+                            }),
+                        ),
+                        (
+                            "amount".to_string(),
+                            AttributeValue::N((index as f64 * 12.75).to_string()),
+                        ),
+                        ("payload".to_string(), AttributeValue::S("x".repeat(512))),
+                    ]);
+                    let put = PutRequest::builder().set_item(Some(item)).build().unwrap();
+                    WriteRequest::builder().put_request(put).build()
+                })
+                .collect::<Vec<_>>();
+            client
+                .batch_write_item()
+                .request_items(&table_name, requests)
+                .send()
+                .await
+                .expect("seed local benchmark table");
+        }
+
+        // Warm the JIT, local HTTP connection, and both SDK connection pools.
+        for _ in 0..5 {
+            let (_, reused_count) = scan_page_with_reused_client(&client, &table_name)
+                .await
+                .expect("warm-up reused-client scan");
+            assert_eq!(reused_count, PAGE_SIZE as usize);
+            let page = scan_items(
+                profile.clone(),
+                region.clone(),
+                Some(endpoint.clone()),
+                table_name.clone(),
+                Some(PAGE_SIZE),
+                None,
+                None,
+            )
+            .await
+            .expect("warm-up scan");
+            assert_eq!(page.items_json.len(), PAGE_SIZE as usize);
+        }
+
+        let mut client_build_samples = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let built = build_ddb_client_uncached(&profile, region.clone(), Some(endpoint.clone()))
+                .await
+                .expect("build uncached benchmark client");
+            client_build_samples.push(started.elapsed());
+            drop(built);
+        }
+
+        let mut client_cache_hit_samples = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let cached = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+                .await
+                .expect("get cached benchmark client");
+            client_cache_hit_samples.push(started.elapsed());
+            drop(cached);
+        }
+
+        let mut reused_client_samples = Vec::with_capacity(SAMPLE_COUNT);
+        let mut app_pipeline_samples = Vec::with_capacity(SAMPLE_COUNT);
+        let mut total_items = 0usize;
+        for sample in 0..SAMPLE_COUNT {
+            if sample % 2 == 0 {
+                let (elapsed, count) = scan_page_with_reused_client(&client, &table_name)
+                    .await
+                    .expect("reused-client scan");
+                reused_client_samples.push(elapsed);
+                total_items += count;
+
+                let (elapsed, count) = scan_page_with_application_api(
+                    &profile,
+                    region.clone(),
+                    &endpoint,
+                    &table_name,
+                )
+                .await
+                .expect("application scan pipeline");
+                app_pipeline_samples.push(elapsed);
+                total_items += count;
+            } else {
+                let (elapsed, count) = scan_page_with_application_api(
+                    &profile,
+                    region.clone(),
+                    &endpoint,
+                    &table_name,
+                )
+                .await
+                .expect("application scan pipeline");
+                app_pipeline_samples.push(elapsed);
+                total_items += count;
+
+                let (elapsed, count) = scan_page_with_reused_client(&client, &table_name)
+                    .await
+                    .expect("reused-client scan");
+                reused_client_samples.push(elapsed);
+                total_items += count;
+            }
+        }
+
+        print_distribution("client_config_uncached", &client_build_samples);
+        print_distribution("client_cache_hit", &client_cache_hit_samples);
+        print_distribution("reused_client_scan_and_json", &reused_client_samples);
+        print_distribution("app_scan_items_end_to_end", &app_pipeline_samples);
+        println!(
+            "fixture=items:{PAGE_SIZE},payload_bytes:512,samples:{SAMPLE_COUNT},emulator={}",
+            std::env::var("DDB_PERF_EMULATOR").unwrap_or_else(|_| "dynamodb-local".to_string())
+        );
+        println!("checksum_items={total_items}");
+
+        client
+            .delete_table()
+            .table_name(&table_name)
+            .send()
+            .await
+            .expect("delete local benchmark table");
+    }
+
+    async fn scan_page_with_reused_client(
+        client: &DdbClient,
+        table_name: &str,
+    ) -> Result<(Duration, usize), String> {
+        let started = Instant::now();
+        let response = client
+            .scan()
+            .table_name(table_name)
+            .limit(PAGE_SIZE)
+            .send()
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        let serialized = response
+            .items
+            .unwrap_or_default()
+            .iter()
+            .map(attr_map_to_json_string)
+            .collect::<Result<Vec<_>, _>>()?;
+        let item_count = serialized.len();
+        black_box(serialized);
+        Ok((started.elapsed(), item_count))
+    }
+
+    async fn scan_page_with_application_api(
+        profile: &str,
+        region: Option<String>,
+        endpoint: &str,
+        table_name: &str,
+    ) -> Result<(Duration, usize), String> {
+        let started = Instant::now();
+        let page = scan_items(
+            profile.to_string(),
+            region,
+            Some(endpoint.to_string()),
+            table_name.to_string(),
+            Some(PAGE_SIZE),
+            None,
+            None,
+        )
+        .await?;
+        let item_count = page.items_json.len();
+        black_box(page.items_json);
+        Ok((started.elapsed(), item_count))
+    }
+
+    fn print_distribution(label: &str, samples: &[Duration]) {
+        let mut micros = samples
+            .iter()
+            .map(|sample| sample.as_secs_f64() * 1_000_000.0)
+            .collect::<Vec<_>>();
+        micros.sort_by(f64::total_cmp);
+        let median = percentile(&micros, 0.50);
+        let p95 = percentile(&micros, 0.95);
+        println!(
+            "{label}_us median={median:.1} p95={p95:.1} min={:.1} max={:.1}",
+            micros[0],
+            micros[micros.len() - 1]
+        );
+    }
+
+    fn percentile(sorted: &[f64], fraction: f64) -> f64 {
+        let index = ((sorted.len() - 1) as f64 * fraction).ceil() as usize;
+        sorted[index]
+    }
 }
 
 pub async fn describe_table(

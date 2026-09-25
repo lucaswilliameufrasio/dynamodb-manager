@@ -20,6 +20,7 @@ class WorkspaceController extends ChangeNotifier {
     _regionOverride = region;
     _endpointOverride = endpoint;
     _tables = [];
+    _deletingTables.clear();
     _tablesLoading = false;
     _tablesError = null;
     _openTables.clear();
@@ -35,6 +36,7 @@ class WorkspaceController extends ChangeNotifier {
 
   // ─── Tables state ──────────────────────────────────────────────────────
   List<String> _tables = [];
+  final Set<String> _deletingTables = {};
   bool _tablesLoading = false;
   String? _tablesError;
 
@@ -48,11 +50,15 @@ class WorkspaceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _tables = await dynamodb.listTables(
+      final listedTables = await dynamodb.listTables(
         profile: _profile,
         regionOverride: _regionOverride,
         endpointOverride: _endpointOverride,
       );
+      _deletingTables.removeWhere((table) => !listedTables.contains(table));
+      _tables = listedTables
+          .where((table) => !_deletingTables.contains(table))
+          .toList();
       _tablesError = null;
     } catch (e) {
       _tablesError = e.toString();
@@ -61,6 +67,94 @@ class WorkspaceController extends ChangeNotifier {
 
     _tablesLoading = false;
     notifyListeners();
+  }
+
+  Future<void> createTable({
+    required String tableName,
+    required String partitionKey,
+    required String partitionKeyType,
+    String? sortKey,
+    String? sortKeyType,
+    required bool provisioned,
+    int readCapacity = 5,
+    int writeCapacity = 5,
+    required String gsisJson,
+  }) async {
+    await dynamodb.createTable(
+      profile: _profile,
+      regionOverride: _regionOverride,
+      endpointOverride: _endpointOverride,
+      tableName: tableName,
+      pkName: partitionKey,
+      pkType: partitionKeyType,
+      skName: sortKey,
+      skType: sortKeyType,
+      billingMode: provisioned ? 'PROVISIONED' : 'PAY_PER_REQUEST',
+      readCapacity: readCapacity,
+      writeCapacity: writeCapacity,
+      gsisJson: gsisJson,
+    );
+    await loadTables();
+  }
+
+  Future<void> deleteTable(String tableName) async {
+    await dynamodb.deleteTable(
+      profile: _profile,
+      regionOverride: _regionOverride,
+      endpointOverride: _endpointOverride,
+      tableName: tableName,
+    );
+    _deletingTables.add(tableName);
+    _tables.remove(tableName);
+    _openTables.remove(tableName);
+    if (_activeTable == tableName) {
+      _activeTable = _openTables.isEmpty ? null : _openTables.last;
+      _currentItems = [];
+      _activeItemIndex = null;
+      _showItemDetails = false;
+      _lastEvaluatedKeyJson = null;
+    }
+    await loadTables();
+    if (_activeTable != null) {
+      await _loadItemsForTable();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  Future<bool> createItem(
+    String itemJson, {
+    required String tableName,
+    required String pkName,
+    String? skName,
+  }) async {
+    try {
+      await dynamodb.putItemCreateOnly(
+        profile: _profile,
+        regionOverride: _regionOverride,
+        endpointOverride: _endpointOverride,
+        tableName: tableName,
+        itemJson: itemJson,
+        pkName: pkName,
+        skName: skName,
+      );
+    } catch (e) {
+      if (e.toString().contains('ConditionalCheckFailed')) return false;
+      rethrow;
+    }
+    if (_activeTable == tableName) await refreshItems();
+    return true;
+  }
+
+  Future<void> replaceItem(String itemJson, {required String tableName}) async {
+    await dynamodb.putItem(
+      profile: _profile,
+      regionOverride: _regionOverride,
+      endpointOverride: _endpointOverride,
+      tableName: tableName,
+      itemJson: itemJson,
+    );
+    if (_activeTable == tableName) await refreshItems();
   }
 
   // ─── Open tabs state ───────────────────────────────────────────────────
@@ -163,12 +257,7 @@ class WorkspaceController extends ChangeNotifier {
       );
 
       for (final jsonStr in result.itemsJson) {
-        final data = jsonDecode(jsonStr);
-        final id = _extractItemLabel(data);
-        const encoder = JsonEncoder.withIndent('  ');
-        _currentItems.add(
-          DynamoItem(id: id, jsonContent: encoder.convert(data)),
-        );
+        _currentItems.add(DynamoItem.fromDynamoJson(jsonStr));
       }
 
       _lastEvaluatedKeyJson = result.lastEvaluatedKeyJson;
@@ -188,17 +277,6 @@ class WorkspaceController extends ChangeNotifier {
   Future<void> refreshItems() async {
     _lastEvaluatedKeyJson = null;
     await _loadItemsForTable();
-  }
-
-  String _extractItemLabel(dynamic data) {
-    if (data is Map) {
-      final keys = data.keys.toList();
-      if (keys.isNotEmpty) {
-        final firstVal = data[keys.first];
-        return '${keys.first}: $firstVal';
-      }
-    }
-    return '(empty item)';
   }
 
   // ─── Item selection ────────────────────────────────────────────────────

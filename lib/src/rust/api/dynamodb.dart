@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `attr_map_to_json_string`, `attr_value_kind`, `attr_value_to_json`, `build_ddb_client`, `build_filter_expression_parts`, `filter_value_to_attr_value`, `json_str_to_attr_map`, `json_val_to_attr_value`, `with_timeout`
+// These functions are ignored because they are not marked as `pub`: `attr_map_to_json_string`, `attr_value_kind`, `attr_value_to_json`, `build_ddb_client`, `build_filter_expression_parts`, `filter_value_to_attr_value`, `json_str_to_attr_map`, `json_val_to_attr_value`, `parse_scalar_attribute_type`, `with_timeout`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FilterExpressionParts`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -18,6 +18,47 @@ Future<List<String>> listTables({
   profile: profile,
   regionOverride: regionOverride,
   endpointOverride: endpointOverride,
+);
+
+/// Create a DynamoDB table with an optional sort key and global secondary indexes.
+Future<void> createTable({
+  required String profile,
+  String? regionOverride,
+  String? endpointOverride,
+  required String tableName,
+  required String pkName,
+  required String pkType,
+  String? skName,
+  String? skType,
+  required String billingMode,
+  PlatformInt64? readCapacity,
+  PlatformInt64? writeCapacity,
+  required String gsisJson,
+}) => RustLib.instance.api.crateApiDynamodbCreateTable(
+  profile: profile,
+  regionOverride: regionOverride,
+  endpointOverride: endpointOverride,
+  tableName: tableName,
+  pkName: pkName,
+  pkType: pkType,
+  skName: skName,
+  skType: skType,
+  billingMode: billingMode,
+  readCapacity: readCapacity,
+  writeCapacity: writeCapacity,
+  gsisJson: gsisJson,
+);
+
+Future<void> deleteTable({
+  required String profile,
+  String? regionOverride,
+  String? endpointOverride,
+  required String tableName,
+}) => RustLib.instance.api.crateApiDynamodbDeleteTable(
+  profile: profile,
+  regionOverride: regionOverride,
+  endpointOverride: endpointOverride,
+  tableName: tableName,
 );
 
 Future<TableSummary> describeTable({
