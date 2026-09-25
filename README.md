@@ -14,7 +14,7 @@ A **desktop DynamoDB browser and manager** built with Flutter (frontend) + Rust 
 
 | Tool        | Recommended version | Notes                             |
 |-------------|---------------------|-----------------------------------|
-| Flutter     | `3.47.4`            | Pinned with FVM; macOS desktop target required |
+| Flutter     | `3.47.4`            | Pinned with FVM; macOS/Linux desktop |
 | Rust        | `1.96.0`            | Stable toolchain                  |
 | AWS CLI     | any recent          | Must be in `$PATH`                |
 | Dart SDK    | `3.13.3`             | Bundled with the pinned Flutter SDK |
@@ -97,3 +97,15 @@ rust/src/
 - [Troubleshooting](docs/troubleshooting.md) — Common issues and fixes
 - [Security](docs/security.md) — What the app logs and never exposes
 - [Performance](docs/performance.md) — Reproducible local baselines for Flutter and Rust
+- [Distribution](docs/distribution.md) — Desktop release workflow and packages
+
+## Desktop distribution
+
+Tagged releases are packaged for macOS (Apple Silicon and Intel) and Linux
+(x86_64 and ARM64). The release workflow publishes a macOS DMG and `.app.zip`
+for each architecture, plus a Linux AppImage for each architecture.
+
+To package locally, use `make package-dist` on macOS or Linux. For a release,
+run **Actions → Prepare Release** on `main`, merge the generated version PR, and
+push its matching `vX.Y.Z` tag. Downloads and macOS signing details are in
+[Distribution](docs/distribution.md) and [macOS signing](docs/macos-signing.md).

@@ -10,10 +10,11 @@
 | AWS CLI | latest | `brew install awscli` |
 | mise | latest | `brew install mise` (optional — for Rust/Flutter toolchain tasks) |
 
-Ensure the `macos` desktop target is available:
+Enable the desktop target for your host when needed:
 
 ```bash
 flutter config --enable-macos-desktop
+flutter config --enable-linux-desktop
 ```
 
 ## Development Commands

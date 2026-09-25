@@ -1,0 +1,165 @@
+name: Desktop Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v1.0.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-packages-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: macos
+            arch: arm64
+          - os: macos-15-intel
+            platform: macos
+            arch: x86_64
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x86_64
+          - os: ubuntu-22.04-arm
+            platform: linux
+            arch: arm64
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a stable version tag such as v1.0.1; received '$RELEASE_TAG'." >&2
+            exit 1
+          fi
+
+      - name: Checkout release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Confirm tag matches app version
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          expected = os.environ["RELEASE_TAG"].removeprefix("v")
+          content = Path("pubspec.yaml").read_text()
+          match = re.search(r"(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+", content)
+          if not match or match.group(1) != expected:
+              actual = match.group(1) if match else "missing"
+              raise SystemExit(f"Tag version {expected} does not match pubspec version {actual}")
+          PY
+
+      - name: Set up Flutter from FVM pin
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: .fvmrc
+          cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+        with:
+          toolchain: 1.96.0
+
+      - name: Install Linux desktop and AppImage dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev plocate
+          sudo updatedb
+          bash scripts/install-appimagetool.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install macOS DMG maker
+        if: matrix.platform == 'macos'
+        run: npm install --global appdmg
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Install Fastforge
+        run: |
+          dart pub global activate fastforge 0.6.12
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+
+      - name: Build macOS DMG and app ZIP
+        if: matrix.platform == 'macos'
+        run: fastforge package --platform macos --targets dmg,zip
+
+      - name: Build Linux AppImage
+        if: matrix.platform == 'linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: fastforge package --platform linux --targets appimage
+
+      - name: Name release assets
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: bash scripts/collect-release-assets.sh "$PLATFORM" "$ARCH" "$RELEASE_TAG"
+
+      - name: Upload packages for release
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Download desktop packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: sha256sum release-assets/* > release-assets/SHA256SUMS.txt
+
+      - name: Create or update release
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --title "DynamoDB Manager $RELEASE_TAG" \
+              --generate-notes
+          fi

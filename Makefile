@@ -1,11 +1,13 @@
 FLUTTER ?= fvm flutter
 DART    ?= fvm dart
 CARGO   ?= cargo
+FASTFORGE_VERSION ?= 0.6.12
 
 .PHONY: help setup get pub-get format format-check fmt analyze test test-ci coverage \
 		lint validate check sync coverage-tools build build-rust build-macos build-linux build-windows \
 		run run-macos run-linux run-windows run-release devices doctor info upgrade clean bootstrap aws-check \
-		perf-dart perf-dynamodb-local perf-floci perf-ui performance
+		perf-dart perf-dynamodb-local perf-floci perf-ui performance \
+		package-linux package-macos package-dist dist-install
 
 help:
 	@echo "DynamoDB Manager commands:"
@@ -32,6 +34,10 @@ help:
 	@echo "  make build-macos   - Build the macOS desktop app"
 	@echo "  make build-linux   - Build the Linux desktop app"
 	@echo "  make build-windows - Build the Windows desktop app"
+	@echo "  make dist-install  - Install pinned Fastforge packaging CLI"
+	@echo "  make package-linux - Build a Linux AppImage"
+	@echo "  make package-macos - Build a macOS DMG and app ZIP"
+	@echo "  make package-dist  - Build the package for this host platform"
 	@echo "  make build-rust    - Compile the Rust library"
 	@echo "  make run           - Alias for run-macos"
 	@echo "  make run-macos     - Run on macOS desktop"
@@ -123,6 +129,30 @@ build-linux:
 
 build-windows:
 	$(FLUTTER) build windows
+
+dist-install:
+	$(DART) pub global activate fastforge $(FASTFORGE_VERSION)
+
+package-linux: dist-install
+	bash scripts/install-appimagetool.sh
+	PATH="$(CURDIR)/.fvm/flutter_sdk/bin:$(HOME)/.pub-cache/bin:$(HOME)/.local/bin:$$PATH" \
+		APPIMAGE_EXTRACT_AND_RUN=1 $(DART) pub global run fastforge:main \
+		--no-version-check package --platform linux --targets appimage
+
+package-macos: dist-install
+	npm install --global appdmg
+	PATH="$(CURDIR)/.fvm/flutter_sdk/bin:$(HOME)/.pub-cache/bin:$$PATH" \
+		$(DART) pub global run fastforge:main --no-version-check \
+		package --platform macos --targets dmg,zip
+
+package-dist:
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		$(MAKE) package-macos; \
+	elif [ "$$(uname -s)" = "Linux" ]; then \
+		$(MAKE) package-linux; \
+	else \
+		echo "Unsupported packaging host: $$(uname -s)" >&2; exit 1; \
+	fi
 
 build-rust:
 	$(CARGO) build --manifest-path rust/Cargo.toml

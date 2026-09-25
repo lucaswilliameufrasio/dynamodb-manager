@@ -1,0 +1,14 @@
+display_name: DynamoDB Manager
+icon: macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png
+keywords:
+  - AWS
+  - DynamoDB
+  - database
+  - developer
+generic_name: DynamoDB browser and manager
+categories:
+  - Development
+  - Database
+startup_notify: true
+include: []
+metainfo: linux/packaging/com.lucaswilliameufrasio.dynamodbmanager.appdata.xml
