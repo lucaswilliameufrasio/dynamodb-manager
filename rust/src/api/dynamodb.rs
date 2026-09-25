@@ -6,7 +6,9 @@ use aws_sdk_dynamodb::types::{
 };
 use aws_sdk_dynamodb::Client as DdbClient;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, OnceCell};
 
 // ─── Data structures exposed to Flutter via FRB ────────────────────────────
 
@@ -54,6 +56,9 @@ struct FilterExpressionParts {
 
 const CONFIG_TIMEOUT: Duration = Duration::from_secs(8);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+// Periodically reload shared AWS profile files while reusing client connections.
+const CLIENT_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const CLIENT_CACHE_MAX_ENTRIES: usize = 16;
 
 /// Run a future with a timeout and produce a user-facing error if it elapses.
 async fn with_timeout<T, F: std::future::Future<Output = Result<T, String>>>(
@@ -75,7 +80,230 @@ async fn with_timeout<T, F: std::future::Future<Output = Result<T, String>>>(
 
 // ─── Client builder ────────────────────────────────────────────────────────
 
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct ClientCacheKey {
+    profile: String,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+}
+
+struct ClientCacheEntry<T> {
+    expires_at: Instant,
+    last_used: Instant,
+    cell: Arc<OnceCell<T>>,
+}
+
+struct ClientCache<T> {
+    entries: HashMap<ClientCacheKey, ClientCacheEntry<T>>,
+}
+
+impl<T> Default for ClientCache<T> {
+    fn default() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+}
+
+impl<T> ClientCache<T> {
+    fn cell_for(&mut self, key: ClientCacheKey, now: Instant) -> Arc<OnceCell<T>> {
+        self.entries.retain(|_, entry| entry.expires_at > now);
+
+        if let Some(entry) = self.entries.get_mut(&key) {
+            entry.last_used = now;
+            return Arc::clone(&entry.cell);
+        }
+
+        if self.entries.len() >= CLIENT_CACHE_MAX_ENTRIES {
+            if let Some(least_recently_used) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            {
+                self.entries.remove(&least_recently_used);
+            }
+        }
+
+        let cell = Arc::new(OnceCell::new());
+        self.entries.insert(
+            key,
+            ClientCacheEntry {
+                expires_at: now + CLIENT_CACHE_TTL,
+                last_used: now,
+                cell: Arc::clone(&cell),
+            },
+        );
+        cell
+    }
+
+    fn invalidate_profile(&mut self, profile: &str) {
+        self.entries.retain(|key, _| key.profile != profile);
+    }
+}
+
+fn ddb_client_cache() -> &'static Mutex<ClientCache<DdbClient>> {
+    static CACHE: OnceLock<Mutex<ClientCache<DdbClient>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(ClientCache::default()))
+}
+
+async fn initialize_cached<T, E, F, Fut>(cell: &OnceCell<T>, initialize: F) -> Result<T, E>
+where
+    T: Clone,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+{
+    Ok(cell.get_or_try_init(initialize).await?.clone())
+}
+
+/// Invalidate cached clients after an explicit credential login for this profile.
+pub(crate) async fn invalidate_profile_client_cache(profile: &str) {
+    ddb_client_cache().lock().await.invalidate_profile(profile);
+}
+
+#[cfg(test)]
+mod client_cache_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn key(profile: &str, region: Option<&str>, endpoint: Option<&str>) -> ClientCacheKey {
+        ClientCacheKey {
+            profile: profile.to_string(),
+            region_override: region.map(str::to_string),
+            endpoint_override: endpoint.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn client_cache_separates_profile_region_and_endpoint() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        let base = cache.cell_for(key("dev", Some("us-east-1"), None), now);
+
+        let same = cache.cell_for(key("dev", Some("us-east-1"), None), now);
+        let other_profile = cache.cell_for(key("prod", Some("us-east-1"), None), now);
+        let other_region = cache.cell_for(key("dev", Some("us-west-2"), None), now);
+        let other_endpoint =
+            cache.cell_for(key("dev", Some("us-east-1"), Some("http://localhost")), now);
+
+        assert!(Arc::ptr_eq(&base, &same));
+        assert!(!Arc::ptr_eq(&base, &other_profile));
+        assert!(!Arc::ptr_eq(&base, &other_region));
+        assert!(!Arc::ptr_eq(&base, &other_endpoint));
+    }
+
+    #[test]
+    fn expired_clients_are_rebuilt_and_profile_invalidation_is_scoped() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        let dev_key = key("dev", Some("us-east-1"), None);
+        let prod_key = key("prod", Some("us-east-1"), None);
+        let dev = cache.cell_for(dev_key.clone(), now);
+        let prod = cache.cell_for(prod_key, now);
+
+        cache.invalidate_profile("dev");
+        let dev_after_invalidation = cache.cell_for(dev_key.clone(), now);
+        let prod_after_invalidation = cache.cell_for(key("prod", Some("us-east-1"), None), now);
+        assert!(!Arc::ptr_eq(&dev, &dev_after_invalidation));
+        assert!(Arc::ptr_eq(&prod, &prod_after_invalidation));
+
+        let dev_after_expiration =
+            cache.cell_for(dev_key, now + CLIENT_CACHE_TTL + Duration::from_secs(1));
+        assert!(!Arc::ptr_eq(&dev_after_invalidation, &dev_after_expiration));
+    }
+
+    #[test]
+    fn client_cache_evicts_least_recently_used_entry_at_capacity() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<u8>::default();
+        cache.cell_for(key("profile-0", None, None), now);
+        let oldest_key = key("profile-1", None, None);
+        let oldest = cache.cell_for(oldest_key.clone(), now + Duration::from_secs(1));
+
+        for index in 1..CLIENT_CACHE_MAX_ENTRIES {
+            cache.cell_for(
+                key(&format!("profile-{index}"), None, None),
+                now + Duration::from_secs(index as u64),
+            );
+        }
+        let recent = cache.cell_for(
+            key("profile-0", None, None),
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64),
+        );
+        assert!(cache.entries.contains_key(&key("profile-0", None, None)));
+        assert!(!Arc::ptr_eq(&oldest, &recent));
+
+        cache.cell_for(
+            key("profile-overflow", None, None),
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64 + 1),
+        );
+        assert_eq!(cache.entries.len(), CLIENT_CACHE_MAX_ENTRIES);
+        let rebuilt_oldest = cache.cell_for(
+            oldest_key,
+            now + Duration::from_secs(CLIENT_CACHE_MAX_ENTRIES as u64 + 2),
+        );
+        assert!(!Arc::ptr_eq(&oldest, &rebuilt_oldest));
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_share_one_client_initialization() {
+        let now = Instant::now();
+        let mut cache = ClientCache::<usize>::default();
+        let cell = cache.cell_for(key("shared", None, None), now);
+        let initialized = Arc::new(AtomicUsize::new(0));
+        let tasks = (0..16)
+            .map(|_| {
+                let cell = Arc::clone(&cell);
+                let initialized = Arc::clone(&initialized);
+                tokio::spawn(async move {
+                    initialize_cached(&cell, || async move {
+                        tokio::task::yield_now().await;
+                        initialized.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, ()>(42)
+                    })
+                    .await
+                    .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for task in tasks {
+            assert_eq!(task.await.unwrap(), 42);
+        }
+        assert_eq!(initialized.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn failed_client_initialization_does_not_poison_the_cache_cell() {
+        let cell = OnceCell::<usize>::new();
+        let failed =
+            initialize_cached(&cell, || async { Err::<usize, _>("temporary failure") }).await;
+        assert_eq!(failed, Err("temporary failure"));
+
+        let recovered = initialize_cached(&cell, || async { Ok::<usize, ()>(42) }).await;
+        assert_eq!(recovered, Ok(42));
+    }
+}
+
 async fn build_ddb_client(
+    profile: &str,
+    region_override: Option<String>,
+    endpoint_override: Option<String>,
+) -> Result<DdbClient, String> {
+    let key = ClientCacheKey {
+        profile: profile.to_string(),
+        region_override: region_override.clone(),
+        endpoint_override: endpoint_override.clone(),
+    };
+    let now = Instant::now();
+    let cell = ddb_client_cache().lock().await.cell_for(key, now);
+    initialize_cached(&cell, || async {
+        build_ddb_client_uncached(profile, region_override, endpoint_override).await
+    })
+    .await
+}
+
+async fn build_ddb_client_uncached(
     profile: &str,
     region_override: Option<String>,
     endpoint_override: Option<String>,
@@ -636,11 +864,21 @@ mod performance_tests {
         let mut client_build_samples = Vec::with_capacity(SAMPLE_COUNT);
         for _ in 0..SAMPLE_COUNT {
             let started = Instant::now();
-            let built = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+            let built = build_ddb_client_uncached(&profile, region.clone(), Some(endpoint.clone()))
                 .await
-                .expect("build benchmark client");
+                .expect("build uncached benchmark client");
             client_build_samples.push(started.elapsed());
             drop(built);
+        }
+
+        let mut client_cache_hit_samples = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let cached = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+                .await
+                .expect("get cached benchmark client");
+            client_cache_hit_samples.push(started.elapsed());
+            drop(cached);
         }
 
         let mut reused_client_samples = Vec::with_capacity(SAMPLE_COUNT);
@@ -684,7 +922,8 @@ mod performance_tests {
             }
         }
 
-        print_distribution("client_config_only", &client_build_samples);
+        print_distribution("client_config_uncached", &client_build_samples);
+        print_distribution("client_cache_hit", &client_cache_hit_samples);
         print_distribution("reused_client_scan_and_json", &reused_client_samples);
         print_distribution("app_scan_items_end_to_end", &app_pipeline_samples);
         println!(

@@ -2,13 +2,19 @@
 
 ## Credential Handling
 
-The app **never**:
+The app code **never**:
 
-- Stores, caches, or logs AWS access keys, secret keys, or session tokens
+- Persists, manually copies/caches, or logs AWS access keys, secret keys, or session tokens
 - Transmits credentials over the network (all AWS SDK calls go directly to the AWS endpoint)
 - Reads or exposes raw credential file contents in the UI
 
 All authentication is delegated to the **AWS CLI** or the **AWS SDK for Rust**, which manage credentials according to the [standard AWS credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html).
+
+The DynamoDB manager reuses AWS SDK client instances in memory for up to five
+minutes per profile/region/endpoint. Resolved credentials remain under the
+AWS SDK credential provider's in-memory refresh/cache behavior; credential
+values are not copied into the app's own cache or written to disk. Successful
+in-app `aws login` and `aws sso login` invalidate that profile's client cache.
 
 ## Diagnostics
 
