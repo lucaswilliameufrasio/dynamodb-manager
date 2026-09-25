@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/dynamo_item.dart';
 import '../models/dynamo_item_validation.dart';
+import '../widgets/dynamo_items_list.dart';
 import '../rust/api/aws_profiles.dart' as profiles;
 import '../rust/api/dynamodb.dart' as dynamodb;
 import '../controllers/workspace_controller.dart';
@@ -1976,33 +1977,12 @@ class _TableDashboard extends StatelessWidget {
   }
 
   Widget _buildItemsList(WorkspaceController c) {
-    if (c.itemsLoading && c.currentItems.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (c.itemsError != null && c.currentItems.isEmpty) {
-      return Center(
-        child: Text(
-          c.itemsError!,
-          style: const TextStyle(color: Colors.redAccent),
-        ),
-      );
-    }
-    return ListView.separated(
-      itemCount: c.currentItems.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final item = c.currentItems[index];
-        final isSelected = item == c.activeItem;
-        return ListTile(
-          selected: isSelected,
-          selectedTileColor: Colors.blue.withValues(alpha: 0.2),
-          title: Text(
-            item.id,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          ),
-          onTap: () => c.selectItem(index),
-        );
-      },
+    return DynamoItemsList(
+      itemsProvider: () => c.currentItems,
+      loading: c.itemsLoading,
+      error: c.itemsError,
+      selectedItemProvider: () => c.activeItem,
+      onSelect: c.selectItem,
     );
   }
 }

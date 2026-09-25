@@ -4,7 +4,8 @@ CARGO   ?= cargo
 
 .PHONY: help setup get pub-get format format-check fmt analyze test test-ci coverage \
 		lint validate check sync coverage-tools build build-rust build-macos build-linux build-windows \
-		run run-macos run-linux run-windows run-release devices doctor info upgrade clean bootstrap aws-check
+		run run-macos run-linux run-windows run-release devices doctor info upgrade clean bootstrap aws-check \
+		perf-dart perf-dynamodb-local perf-ui performance
 
 help:
 	@echo "DynamoDB Manager commands:"
@@ -19,6 +20,10 @@ help:
 	@echo "  make test-ci       - Run all tests and collect coverage"
 	@echo "  make coverage      - Run Flutter tests and Rust coverage"
 	@echo "  make coverage-tools - Install cargo-llvm-cov if needed"
+	@echo "  make perf-dart     - Benchmark Dart conversion of a 50-item page"
+	@echo "  make perf-dynamodb-local - Benchmark Rust Scan pipeline against local DynamoDB"
+	@echo "  make perf-ui       - Profile scrolling the 50-item list widget"
+	@echo "  make performance   - Run all performance benchmarks"
 	@echo "  make lint          - Run Flutter analysis and Rust Clippy"
 	@echo "  make validate      - Run format-check, lint, tests, and Rust build"
 	@echo "  make sync          - Regenerate flutter_rust_bridge bindings"
@@ -52,11 +57,11 @@ pub-get:
 format: fmt
 
 fmt:
-	$(DART) format lib test
+	$(DART) format lib test integration_test tool
 	$(CARGO) fmt --manifest-path rust/Cargo.toml
 
 format-check:
-	$(DART) format --output=none --set-exit-if-changed lib test
+	$(DART) format --output=none --set-exit-if-changed lib test integration_test tool
 	$(CARGO) fmt --manifest-path rust/Cargo.toml -- --check
 
 analyze:
@@ -79,6 +84,20 @@ coverage-tools:
 coverage: coverage-tools
 	$(FLUTTER) test --coverage
 	$(CARGO) llvm-cov --manifest-path rust/Cargo.toml --summary-only
+
+perf-dart:
+	$(DART) compile exe tool/perf/dynamodb_item_page_benchmark.dart \
+		-o /tmp/dynamodb-manager-item-page-benchmark
+	/tmp/dynamodb-manager-item-page-benchmark
+
+perf-dynamodb-local:
+	bash scripts/perf-dynamodb-local.sh
+
+perf-ui:
+	$(FLUTTER) drive --profile --driver=test_driver/integration_test.dart \
+		--target=integration_test/performance_test.dart -d linux
+
+performance: perf-dart perf-dynamodb-local perf-ui
 
 lint: analyze
 	$(CARGO) clippy --manifest-path rust/Cargo.toml -- -D warnings

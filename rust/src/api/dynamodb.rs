@@ -509,6 +509,263 @@ mod table_operation_tests {
     }
 }
 
+#[cfg(test)]
+mod performance_tests {
+    use super::*;
+    use aws_sdk_dynamodb::types::{PutRequest, WriteRequest};
+    use std::hint::black_box;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    const PAGE_SIZE: i32 = 50;
+    const SAMPLE_COUNT: usize = 40;
+
+    #[tokio::test]
+    #[ignore = "run via make perf-dynamodb-local; requires disposable DynamoDB Local"]
+    async fn benchmark_scan_page_pipeline_against_local_dynamodb() {
+        let endpoint = std::env::var("DDB_PERF_ENDPOINT")
+            .unwrap_or_else(|_| "http://127.0.0.1:18000".to_string());
+        let profile = "default".to_string();
+        let region = Some("us-east-1".to_string());
+        let table_name = format!(
+            "dynamodb_manager_perf_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        );
+
+        let client = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+            .await
+            .expect("build local benchmark client");
+        let key_attribute = AttributeDefinition::builder()
+            .attribute_name("pk")
+            .attribute_type(ScalarAttributeType::S)
+            .build()
+            .unwrap();
+        let partition_key = KeySchemaElement::builder()
+            .attribute_name("pk")
+            .key_type(KeyType::Hash)
+            .build()
+            .unwrap();
+        client
+            .create_table()
+            .table_name(&table_name)
+            .attribute_definitions(key_attribute)
+            .key_schema(partition_key)
+            .billing_mode(BillingMode::PayPerRequest)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("create local benchmark table: {error:?}"));
+
+        let mut active = false;
+        for _ in 0..100 {
+            if let Ok(description) = client.describe_table().table_name(&table_name).send().await {
+                if description
+                    .table
+                    .and_then(|table| {
+                        table
+                            .table_status()
+                            .map(|status| status.as_str().to_string())
+                    })
+                    .as_deref()
+                    == Some("ACTIVE")
+                {
+                    active = true;
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(active, "local benchmark table did not become ACTIVE");
+
+        for batch_start in (0..PAGE_SIZE).step_by(25) {
+            let requests = (batch_start..(batch_start + 25).min(PAGE_SIZE))
+                .map(|index| {
+                    let item = HashMap::from([
+                        (
+                            "pk".to_string(),
+                            AttributeValue::S(format!("item-{index:03}")),
+                        ),
+                        (
+                            "status".to_string(),
+                            AttributeValue::S(if index % 2 == 0 {
+                                "complete".to_string()
+                            } else {
+                                "pending".to_string()
+                            }),
+                        ),
+                        (
+                            "amount".to_string(),
+                            AttributeValue::N((index as f64 * 12.75).to_string()),
+                        ),
+                        ("payload".to_string(), AttributeValue::S("x".repeat(512))),
+                    ]);
+                    let put = PutRequest::builder().set_item(Some(item)).build().unwrap();
+                    WriteRequest::builder().put_request(put).build()
+                })
+                .collect::<Vec<_>>();
+            client
+                .batch_write_item()
+                .request_items(&table_name, requests)
+                .send()
+                .await
+                .expect("seed local benchmark table");
+        }
+
+        // Warm the JIT, local HTTP connection, and both SDK connection pools.
+        for _ in 0..5 {
+            let (_, reused_count) = scan_page_with_reused_client(&client, &table_name)
+                .await
+                .expect("warm-up reused-client scan");
+            assert_eq!(reused_count, PAGE_SIZE as usize);
+            let page = scan_items(
+                profile.clone(),
+                region.clone(),
+                Some(endpoint.clone()),
+                table_name.clone(),
+                Some(PAGE_SIZE),
+                None,
+                None,
+            )
+            .await
+            .expect("warm-up scan");
+            assert_eq!(page.items_json.len(), PAGE_SIZE as usize);
+        }
+
+        let mut client_build_samples = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let built = build_ddb_client(&profile, region.clone(), Some(endpoint.clone()))
+                .await
+                .expect("build benchmark client");
+            client_build_samples.push(started.elapsed());
+            drop(built);
+        }
+
+        let mut reused_client_samples = Vec::with_capacity(SAMPLE_COUNT);
+        let mut app_pipeline_samples = Vec::with_capacity(SAMPLE_COUNT);
+        let mut total_items = 0usize;
+        for sample in 0..SAMPLE_COUNT {
+            if sample % 2 == 0 {
+                let (elapsed, count) = scan_page_with_reused_client(&client, &table_name)
+                    .await
+                    .expect("reused-client scan");
+                reused_client_samples.push(elapsed);
+                total_items += count;
+
+                let (elapsed, count) = scan_page_with_application_api(
+                    &profile,
+                    region.clone(),
+                    &endpoint,
+                    &table_name,
+                )
+                .await
+                .expect("application scan pipeline");
+                app_pipeline_samples.push(elapsed);
+                total_items += count;
+            } else {
+                let (elapsed, count) = scan_page_with_application_api(
+                    &profile,
+                    region.clone(),
+                    &endpoint,
+                    &table_name,
+                )
+                .await
+                .expect("application scan pipeline");
+                app_pipeline_samples.push(elapsed);
+                total_items += count;
+
+                let (elapsed, count) = scan_page_with_reused_client(&client, &table_name)
+                    .await
+                    .expect("reused-client scan");
+                reused_client_samples.push(elapsed);
+                total_items += count;
+            }
+        }
+
+        print_distribution("client_config_only", &client_build_samples);
+        print_distribution("reused_client_scan_and_json", &reused_client_samples);
+        print_distribution("app_scan_items_end_to_end", &app_pipeline_samples);
+        println!(
+            "fixture=items:{PAGE_SIZE},payload_bytes:512,samples:{SAMPLE_COUNT},endpoint:dynamodb-local"
+        );
+        println!("checksum_items={total_items}");
+
+        client
+            .delete_table()
+            .table_name(&table_name)
+            .send()
+            .await
+            .expect("delete local benchmark table");
+    }
+
+    async fn scan_page_with_reused_client(
+        client: &DdbClient,
+        table_name: &str,
+    ) -> Result<(Duration, usize), String> {
+        let started = Instant::now();
+        let response = client
+            .scan()
+            .table_name(table_name)
+            .limit(PAGE_SIZE)
+            .send()
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        let serialized = response
+            .items
+            .unwrap_or_default()
+            .iter()
+            .map(attr_map_to_json_string)
+            .collect::<Result<Vec<_>, _>>()?;
+        let item_count = serialized.len();
+        black_box(serialized);
+        Ok((started.elapsed(), item_count))
+    }
+
+    async fn scan_page_with_application_api(
+        profile: &str,
+        region: Option<String>,
+        endpoint: &str,
+        table_name: &str,
+    ) -> Result<(Duration, usize), String> {
+        let started = Instant::now();
+        let page = scan_items(
+            profile.to_string(),
+            region,
+            Some(endpoint.to_string()),
+            table_name.to_string(),
+            Some(PAGE_SIZE),
+            None,
+            None,
+        )
+        .await?;
+        let item_count = page.items_json.len();
+        black_box(page.items_json);
+        Ok((started.elapsed(), item_count))
+    }
+
+    fn print_distribution(label: &str, samples: &[Duration]) {
+        let mut micros = samples
+            .iter()
+            .map(|sample| sample.as_secs_f64() * 1_000_000.0)
+            .collect::<Vec<_>>();
+        micros.sort_by(f64::total_cmp);
+        let median = percentile(&micros, 0.50);
+        let p95 = percentile(&micros, 0.95);
+        println!(
+            "{label}_us median={median:.1} p95={p95:.1} min={:.1} max={:.1}",
+            micros[0],
+            micros[micros.len() - 1]
+        );
+    }
+
+    fn percentile(sorted: &[f64], fraction: f64) -> f64 {
+        let index = ((sorted.len() - 1) as f64 * fraction).ceil() as usize;
+        sorted[index]
+    }
+}
+
 pub async fn describe_table(
     profile: String,
     region_override: Option<String>,

@@ -1,7 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dynamodb_manager/src/models/dynamo_item_validation.dart';
+import 'package:dynamodb_manager/src/models/dynamo_item.dart';
 
 void main() {
+  test('DynamoItem parses and formats one item from a scan page', () {
+    final item = DynamoItem.fromDynamoJson('{"pk":"user-1","value":42}');
+
+    expect(item.id, 'pk: user-1');
+    expect(item.jsonContent, '{\n  "pk": "user-1",\n  "value": 42\n}');
+  });
+
   group('parseNewDynamoItem', () {
     test('accepts an object containing both table keys', () {
       expect(

@@ -257,12 +257,7 @@ class WorkspaceController extends ChangeNotifier {
       );
 
       for (final jsonStr in result.itemsJson) {
-        final data = jsonDecode(jsonStr);
-        final id = _extractItemLabel(data);
-        const encoder = JsonEncoder.withIndent('  ');
-        _currentItems.add(
-          DynamoItem(id: id, jsonContent: encoder.convert(data)),
-        );
+        _currentItems.add(DynamoItem.fromDynamoJson(jsonStr));
       }
 
       _lastEvaluatedKeyJson = result.lastEvaluatedKeyJson;
@@ -282,17 +277,6 @@ class WorkspaceController extends ChangeNotifier {
   Future<void> refreshItems() async {
     _lastEvaluatedKeyJson = null;
     await _loadItemsForTable();
-  }
-
-  String _extractItemLabel(dynamic data) {
-    if (data is Map) {
-      final keys = data.keys.toList();
-      if (keys.isNotEmpty) {
-        final firstVal = data[keys.first];
-        return '${keys.first}: $firstVal';
-      }
-    }
-    return '(empty item)';
   }
 
   // ─── Item selection ────────────────────────────────────────────────────

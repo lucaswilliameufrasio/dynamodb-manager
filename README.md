@@ -96,3 +96,4 @@ rust/src/
 - [Development](docs/development.md) — Workflow, codegen, key modules
 - [Troubleshooting](docs/troubleshooting.md) — Common issues and fixes
 - [Security](docs/security.md) — What the app logs and never exposes
+- [Performance](docs/performance.md) — Reproducible local baselines for Flutter and Rust
