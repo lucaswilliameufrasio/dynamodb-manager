@@ -927,7 +927,8 @@ mod performance_tests {
         print_distribution("reused_client_scan_and_json", &reused_client_samples);
         print_distribution("app_scan_items_end_to_end", &app_pipeline_samples);
         println!(
-            "fixture=items:{PAGE_SIZE},payload_bytes:512,samples:{SAMPLE_COUNT},endpoint:dynamodb-local"
+            "fixture=items:{PAGE_SIZE},payload_bytes:512,samples:{SAMPLE_COUNT},emulator={}",
+            std::env::var("DDB_PERF_EMULATOR").unwrap_or_else(|_| "dynamodb-local".to_string())
         );
         println!("checksum_items={total_items}");
 

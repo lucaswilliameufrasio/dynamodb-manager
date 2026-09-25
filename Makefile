@@ -5,7 +5,7 @@ CARGO   ?= cargo
 .PHONY: help setup get pub-get format format-check fmt analyze test test-ci coverage \
 		lint validate check sync coverage-tools build build-rust build-macos build-linux build-windows \
 		run run-macos run-linux run-windows run-release devices doctor info upgrade clean bootstrap aws-check \
-		perf-dart perf-dynamodb-local perf-ui performance
+		perf-dart perf-dynamodb-local perf-floci perf-ui performance
 
 help:
 	@echo "DynamoDB Manager commands:"
@@ -22,6 +22,7 @@ help:
 	@echo "  make coverage-tools - Install cargo-llvm-cov if needed"
 	@echo "  make perf-dart     - Benchmark Dart conversion of a 50-item page"
 	@echo "  make perf-dynamodb-local - Benchmark Rust Scan pipeline against local DynamoDB"
+	@echo "  make perf-floci    - Validate Rust AWS SDK calls against Floci"
 	@echo "  make perf-ui       - Profile scrolling the 50-item list widget"
 	@echo "  make performance   - Run all performance benchmarks"
 	@echo "  make lint          - Run Flutter analysis and Rust Clippy"
@@ -93,11 +94,14 @@ perf-dart:
 perf-dynamodb-local:
 	bash scripts/perf-dynamodb-local.sh
 
+perf-floci:
+	bash scripts/perf-floci.sh
+
 perf-ui:
 	$(FLUTTER) drive --profile --driver=test_driver/integration_test.dart \
 		--target=integration_test/performance_test.dart -d linux
 
-performance: perf-dart perf-dynamodb-local perf-ui
+performance: perf-dart perf-dynamodb-local perf-floci perf-ui
 
 lint: analyze
 	$(CARGO) clippy --manifest-path rust/Cargo.toml -- -D warnings

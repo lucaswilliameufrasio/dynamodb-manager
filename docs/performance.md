@@ -6,8 +6,9 @@ remain attributable to one layer:
 ```bash
 make perf-dart            # Dart JSON decode + pretty-print for a 50-item page
 make perf-dynamodb-local  # Rust SDK config + Scan + AttributeValue-to-JSON
+make perf-floci           # Rust AWS SDK compatibility against Floci 2.1.0
 make perf-ui              # Flutter profile-mode frames while scrolling 50 rows
-make performance          # Run all three
+make performance          # Run all four
 ```
 
 `perf-dynamodb-local` starts a disposable, in-memory DynamoDB Local 2.6.1
@@ -15,6 +16,15 @@ container on `127.0.0.1:18000`, uses synthetic credentials, seeds 50 items, and
 stops/removes the container afterward. Set `DDB_PERF_PORT` to use another local
 port. It requires Docker and `curl`; it never calls an AWS account. `perf-ui`
 requires the Flutter Linux desktop target.
+
+`perf-floci` runs the same Rust AWS SDK test against a disposable Floci 2.1.0
+container. This adds AWS-emulator compatibility coverage for CreateTable,
+DescribeTable, BatchWriteItem, Scan, and DeleteTable. Keep its timing separate
+from DynamoDB Local: Floci is useful for API compatibility and broader AWS
+integration, not a substitute implementation for service-specific AWS latency.
+Rust AWS SDK DynamoDB 1.115.0 calls used here passed against Floci 2.1.0. The
+published Floci compatibility matrix does not list this Rust SDK, so keep this
+smoke test in the project.
 
 The Rust report separates uncached config/client construction, a cache hit, a
 Scan using a reused client plus JSON serialization, and the `scan_items`
@@ -55,10 +65,10 @@ provider stays attached to each client; the app does not extract or log raw
 credentials. Changes to AWS profile files made outside the app are picked up
 when the entry expires (within five minutes).
 
-Seven post-cache local runs of the final implementation measured cache hits at
+Eight post-cache local runs of the final implementation measured cache hits at
 0.1–0.3 µs and `scan_items` at 2.22–3.12 ms median / 5.37–7.06 ms p95. The
-median of run medians changed from 4.99 ms to 2.60 ms (~48% lower); the median
-p95 changed from 8.85 ms to 6.56 ms (~26% lower). The direct reused-client
+median of run medians changed from 4.99 ms to 2.66 ms (~47% lower); the median
+p95 changed from 8.85 ms to 6.40 ms (~28% lower). The direct reused-client
 comparison varied more than the app-path samples, so treat these as local
 directional evidence, not an AWS latency guarantee.
 
