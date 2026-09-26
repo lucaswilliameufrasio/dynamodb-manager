@@ -2,6 +2,15 @@
 
 All notable changes to DynamoDB Manager are documented here.
 
+## [1.0.1] - 2026-09-26
+
+### Bug Fixes
+
+- *(release)* Checkout repo before publishing release
+
+### Chores
+
+- Upgrade Flutter to 3.47.5
 ## [1.0.0] - 2026-09-25
 
 ### Bug Fixes
